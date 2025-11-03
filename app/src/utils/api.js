@@ -1,14 +1,13 @@
 // API Configuration
-const RAW_BASE = (import.meta.env.VITE_API_URL || 'https://ideal-nimko-web-production-e088.up.railway.app').replace(/\/$/, '');
+const RAW_BASE = (import.meta.env.VITE_API_URL );
 // Remove /api suffix if present to normalize the base URL
-export const API_BASE_URL = RAW_BASE.replace(/\/api\/?$/i, '');
-// Always add /api prefix for API endpoints
-const API_PREFIX = '/api';
+export const API_BASE_URL = RAW_BASE;
+
 
 const withApi = (path) => {
   // Ensure path starts with /
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${API_PREFIX}${normalizedPath}`;
+  return `${API_BASE_URL}${normalizedPath}`;
 };
 
 export const api = {
