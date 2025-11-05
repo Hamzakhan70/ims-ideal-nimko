@@ -8,6 +8,8 @@ export default function UserManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [cities, setCities] = useState([]);
+  const [selectedCityFilter, setSelectedCityFilter] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -16,20 +18,28 @@ export default function UserManagement() {
     phone: '',
     address: '',
     territory: '',
+    city: '',
     pendingAmount: 0,
     creditLimit: 0
   });
 
   useEffect(() => {
     fetchUsers();
+    fetchCities();
   }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('adminToken');
+      const params = {};
+      if (selectedCityFilter) {
+        params.role = 'shopkeeper';
+        params.city = selectedCityFilter;
+      }
       const response = await axios.get(api.users.getAll(), {
         headers: { 'Authorization': `Bearer ${token}` }
+        , params
       });
       setUsers(response.data.users || []);
     } catch (error) {
@@ -37,6 +47,18 @@ export default function UserManagement() {
       alert('Error loading users: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCities = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(api.cities.getAll(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setCities(response.data.cities || []);
+    } catch (error) {
+      console.error('Error fetching cities:', error);
     }
   };
 
@@ -55,6 +77,9 @@ export default function UserManagement() {
         // Don't send password if it's empty during update
         delete submitData.password;
       }
+      if (!submitData.city) {
+        delete submitData.city;
+      }
       
       const response = await axios[method](url, submitData, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -71,6 +96,7 @@ export default function UserManagement() {
         phone: '',
         address: '',
         territory: '',
+        city: '',
         pendingAmount: 0,
         creditLimit: 0
       });
@@ -84,6 +110,7 @@ export default function UserManagement() {
   };
 
   const handleEdit = (user) => {
+    fetchCities(); // Refresh cities list when editing
     setEditingUser(user);
     setFormData({
       name: user.name,
@@ -93,6 +120,7 @@ export default function UserManagement() {
       phone: user.phone,
       address: user.address,
       territory: user.territory || '',
+      city: (user.city && (user.city._id || user.city)) || '',
       pendingAmount: user.pendingAmount || 0,
       creditLimit: user.creditLimit || 0
     });
@@ -129,6 +157,7 @@ export default function UserManagement() {
       phone: '',
       address: '',
       territory: '',
+      city: '',
       pendingAmount: 0,
       creditLimit: 0
     });
@@ -147,11 +176,45 @@ export default function UserManagement() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            fetchCities(); // Refresh cities list when opening form
+            setShowForm(true);
+          }}
           className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
         >
           Create New User
         </button>
+      </div>
+
+      {/* City Filter for Shopkeepers */}
+      <div className="bg-white rounded-lg p-4 mb-4 flex items-end gap-4">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Filter Shopkeepers by City</label>
+          <select
+            value={selectedCityFilter}
+            onChange={(e) => setSelectedCityFilter(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All (no city filter)</option>
+            {cities.map((c) => (
+              <option key={c._id} value={c._id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={fetchUsers}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            Apply
+          </button>
+          <button
+            onClick={() => { setSelectedCityFilter(''); fetchUsers(); }}
+            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
       {/* User Form Modal */}
@@ -261,6 +324,19 @@ export default function UserManagement() {
               {/* Shopkeeper specific fields */}
               {formData.role === 'shopkeeper' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                    <select
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select city</option>
+                      {cities.map((c) => (
+                        <option key={c._id} value={c._id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Pending Amount (PKR)

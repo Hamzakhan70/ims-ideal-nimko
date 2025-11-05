@@ -79,7 +79,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
 // @access  Private (Admin/SuperAdmin)
 router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { role, page = 1, limit = 10, search } = req.query;
+    const { role, page = 1, limit = 10, search, city } = req.query;
     let query = {};
 
     // Super admin can see all users, admin can see salesmen and shopkeepers
@@ -99,11 +99,17 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
       ];
     }
 
+    // Filter by city for shopkeepers
+    if (city) {
+      query.city = city;
+    }
+
     const skip = (page - 1) * limit;
     const users = await User.find(query)
       .select('-password')
       .populate('assignedBy', 'name email')
       .populate('assignedSalesman', 'name email')
+      .populate('city', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -147,6 +153,7 @@ router.post('/', authenticateToken, requireSuperAdmin, async (req, res) => {
         phone: user.phone,
         address: user.address,
         territory: user.territory,
+        city: user.city,
         pendingAmount: user.pendingAmount,
         creditLimit: user.creditLimit,
         isActive: user.isActive

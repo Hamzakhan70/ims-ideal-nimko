@@ -50,6 +50,14 @@ export const api = {
     getAll: () => withApi('/shopkeepers')
   },
 
+  // Cities
+  cities: {
+    getAll: () => withApi('/cities'),
+    create: () => withApi('/cities'),
+    update: (id) => withApi(`/cities/${id}`),
+    delete: (id) => withApi(`/cities/${id}`)
+  },
+
   // Users
   users: {
     getAll: () => withApi('/users'),

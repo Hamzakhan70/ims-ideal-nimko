@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { api } from '../../utils/api';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('users');
@@ -19,19 +20,48 @@ export default function SettingsPage() {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
+  
+  // Cities state
+  const [cities, setCities] = useState([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [showCityModal, setShowCityModal] = useState(false);
+  const [editingCity, setEditingCity] = useState(null);
+  const [cityForm, setCityForm] = useState({ name: '' });
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+    if (activeTab === 'cities') {
+      fetchCities();
+    }
+  }, [activeTab]);
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/users?limit=1000');
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(api.users.getAll() + '?limit=1000', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       setUsers(response.data.users);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCities = async () => {
+    setLoadingCities(true);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(api.cities.getAll(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setCities(response.data.cities || []);
+    } catch (error) {
+      console.error('Error fetching cities:', error);
+      alert('Error loading cities: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoadingCities(false);
     }
   };
 
@@ -117,6 +147,53 @@ export default function SettingsPage() {
     }
   };
 
+  // City management functions
+  const handleCitySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('adminToken');
+      const headers = { 'Authorization': `Bearer ${token}` };
+      
+      if (editingCity) {
+        await axios.put(api.cities.update(editingCity._id), cityForm, { headers });
+      } else {
+        await axios.post(api.cities.create(), cityForm, { headers });
+      }
+      
+      setShowCityModal(false);
+      setEditingCity(null);
+      setCityForm({ name: '' });
+      fetchCities();
+    } catch (error) {
+      console.error('Error saving city:', error);
+      alert('Error saving city: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleEditCity = (city) => {
+    setEditingCity(city);
+    setCityForm({ name: city.name });
+    setShowCityModal(true);
+  };
+
+  const handleDeleteCity = async (cityId) => {
+    if (!window.confirm('Are you sure you want to delete this city? This will remove the city assignment from all shopkeepers.')) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('adminToken');
+      await axios.delete(api.cities.delete(cityId), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      fetchCities();
+      alert('City deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting city:', error);
+      alert('Error deleting city: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -141,6 +218,16 @@ export default function SettingsPage() {
             }`}
           >
             User Management
+          </button>
+          <button
+            onClick={() => setActiveTab('cities')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'cities'
+                ? 'border-yellow-500 text-yellow-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Cities Management
           </button>
           <button
             onClick={() => setActiveTab('system')}
@@ -264,6 +351,92 @@ export default function SettingsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'cities' && (
+        <div>
+          {/* Header */}
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">Cities Management</h2>
+            <button
+              onClick={() => {
+                setEditingCity(null);
+                setCityForm({ name: '' });
+                setShowCityModal(true);
+              }}
+              className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
+            >
+              Add New City
+            </button>
+          </div>
+
+          {/* Cities Table */}
+          {loadingCities ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center">
+              <div className="text-lg">Loading cities...</div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              {cities.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No cities found. Add your first city above.
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        City Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created At
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {cities.map((city) => (
+                      <tr key={city._id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{city.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            city.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {city.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(city.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                          <button
+                            onClick={() => handleEditCity(city)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCity(city._id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -403,6 +576,67 @@ export default function SettingsPage() {
                       setShowUserModal(false);
                       setEditingUser(null);
                       resetForm();
+                    }}
+                    className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* City Modal */}
+      {showCityModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {editingCity ? 'Edit City' : 'Add New City'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowCityModal(false);
+                    setEditingCity(null);
+                    setCityForm({ name: '' });
+                  }}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                >
+                  ×
+                </button>
+              </div>
+
+              <form onSubmit={handleCitySubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    City Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={cityForm.name}
+                    onChange={(e) => setCityForm({ name: e.target.value.trim() })}
+                    placeholder="Enter city name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  />
+                </div>
+
+                <div className="flex space-x-4 pt-4">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
+                  >
+                    {editingCity ? 'Update' : 'Create'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCityModal(false);
+                      setEditingCity(null);
+                      setCityForm({ name: '' });
                     }}
                     className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
                   >

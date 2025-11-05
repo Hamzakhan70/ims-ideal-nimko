@@ -59,6 +59,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  // City for shopkeepers
+  city: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'City',
+    default: null
+  },
   // Pending amount for shopkeepers (outstanding balance)
   pendingAmount: {
     type: Number,

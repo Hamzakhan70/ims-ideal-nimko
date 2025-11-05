@@ -17,6 +17,7 @@ import recoveryRoutes from "./routes/recoveryRoutes.js";
 import receiptRoutes from "./routes/receiptRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import cityRoutes from "./routes/cityRoutes.js";
 
 dotenv.config();
 const app = express();
@@ -69,6 +70,7 @@ app.use("/api/recoveries", recoveryRoutes);
 app.use("/api/receipts", receiptRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/cities", cityRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {

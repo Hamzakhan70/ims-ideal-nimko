@@ -10,6 +10,7 @@ const router = express.Router();
 router.get('/', authenticateToken, async (req, res) => {
   try {
     let query = {};
+    const { city } = req.query;
     
     if (req.user.role === 'salesman') {
       // Salesman can only see their assigned shopkeepers
@@ -23,8 +24,13 @@ router.get('/', authenticateToken, async (req, res) => {
     // Super admin can see all shopkeepers
 
     query.role = 'shopkeeper';
+    if (city) {
+      query.city = city;
+    }
 
-    const shopkeepers = await User.find(query).select('name email phone address pendingAmount creditLimit');
+    const shopkeepers = await User.find(query)
+      .select('name email phone address pendingAmount creditLimit city')
+      .populate('city', 'name');
 
     res.json({ shopkeepers });
   } catch (error) {
