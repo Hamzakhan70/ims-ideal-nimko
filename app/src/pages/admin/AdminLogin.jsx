@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAdmin } from '../../context/AdminContext';
+import { useToast } from '../../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function AdminLogin() {
@@ -8,7 +9,8 @@ export default function AdminLogin() {
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const { login, loading, error } = useAdmin();
+  const { login, loading } = useAdmin();
+  const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -22,7 +24,12 @@ export default function AdminLogin() {
     e.preventDefault();
     const result = await login(formData.email, formData.password);
     if (result.success) {
-      navigate('/dashboard');
+      showSuccess('Login successful! Redirecting...');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 500);
+    } else {
+      showError(result.error || 'Login failed. Please try again.');
     }
   };
 
@@ -94,12 +101,6 @@ export default function AdminLogin() {
               </button>
             </div>
           </div>
-
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
 
           <div>
             <button

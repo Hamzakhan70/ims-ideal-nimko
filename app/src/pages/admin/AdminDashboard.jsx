@@ -112,27 +112,9 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-gray-600">Welcome back, {admin?.name}</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={fetchDashboardData}
-                disabled={loading}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Refreshing...' : 'Refresh Data'}
-              </button>
-              <span className="text-sm text-gray-500">Role: {admin?.role}</span>
-              <button
-                onClick={logout}
-                className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
+          <div className="py-6">
+            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-600">Welcome back, {admin?.name}</p>
           </div>
         </div>
       </div>

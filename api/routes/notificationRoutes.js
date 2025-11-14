@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Notification from '../models/Notification.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -45,17 +46,53 @@ router.get('/', authenticateToken, async (req, res) => {
     // Get total count
     const total = await Notification.countDocuments(query);
 
-    // Get unread count
-    const unreadCount = await Notification.countDocuments({
-      ...query,
-      'readBy.user': { $ne: req.user._id }
-    });
+    // Get unread count - use aggregation to properly check nested array
+    const userId = mongoose.Types.ObjectId.isValid(req.user._id) 
+      ? new mongoose.Types.ObjectId(req.user._id) 
+      : req.user._id;
+    
+    const unreadResult = await Notification.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          isReadByUser: {
+            $anyElementTrue: {
+              $map: {
+                input: { $ifNull: ['$readBy', []] },
+                as: 'read',
+                in: { 
+                  $eq: [
+                    { $ifNull: ['$$read.user', null] }, 
+                    userId
+                  ] 
+                }
+              }
+            }
+          }
+        }
+      },
+      { $match: { isReadByUser: false } },
+      { $count: 'count' }
+    ]);
+    
+    const unreadCount = unreadResult[0]?.count || 0;
 
     // Add isRead flag for each notification
-    const notificationsWithReadStatus = notifications.map(notification => ({
-      ...notification.toObject(),
-      isRead: notification.isReadBy(req.user._id)
-    }));
+    const notificationsWithReadStatus = notifications.map(notification => {
+      try {
+        const isRead = notification.isReadBy(req.user._id);
+        return {
+          ...notification.toObject(),
+          isRead
+        };
+      } catch (error) {
+        console.error('Error checking isReadBy for notification:', notification._id, error);
+        return {
+          ...notification.toObject(),
+          isRead: false
+        };
+      }
+    });
 
     res.json({
       success: true,
@@ -69,7 +106,11 @@ router.get('/', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching notifications:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

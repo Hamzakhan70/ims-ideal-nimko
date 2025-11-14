@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../context/NotificationContext';
 
 const NotificationDropdown = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
-
-  // Debug logging
-  console.log('NotificationDropdown rendered, unreadCount:', unreadCount);
+  const navigate = useNavigate();
 
   const formatTime = (date) => {
     return new Date(date).toLocaleString('en-IN', {
@@ -43,30 +42,39 @@ const NotificationDropdown = () => {
     }
   };
 
+  // Filter to only show order notifications count
+  const orderNotifications = notifications.filter(n => n.type === 'order');
+  const unreadOrderCount = orderNotifications.filter(n => !n.isRead).length;
+
   return (
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-white hover:text-yellow-200 focus:outline-none focus:ring-2 focus:ring-white rounded-lg transition-colors"
+        className="relative p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg transition-colors"
         title="Notifications"
       >
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
-            {unreadCount > 9 ? '9+' : unreadCount}
+        {unreadOrderCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+            {unreadOrderCount > 9 ? '9+' : unreadOrderCount}
           </span>
         )}
-        {/* Debug indicator */}
-        <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></div>
       </button>
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Notifications
+                {unreadCount > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({unreadCount} unread)
+                  </span>
+                )}
+              </h3>
               {unreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
@@ -96,6 +104,15 @@ const NotificationDropdown = () => {
                       markAsRead(notification._id);
                     }
                     setIsOpen(false);
+                    
+                    // Navigate to order page if it's an order notification
+                    if (notification.type === 'order' && notification.relatedEntity) {
+                      if (notification.relatedEntityType === 'Order') {
+                        navigate('/admin/website-orders');
+                      } else if (notification.relatedEntityType === 'ShopkeeperOrder') {
+                        navigate('/admin/shopkeeper-orders');
+                      }
+                    }
                   }}
                 >
                   <div className="flex items-start space-x-3">

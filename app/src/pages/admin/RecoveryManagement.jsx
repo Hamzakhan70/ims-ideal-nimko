@@ -1,71 +1,89 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { api } from '../../utils/api';
+import DataTable from '../../components/common/DataTable';
+import Pagination from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 const RecoveryManagement = () => {
-  const [recoveries, setRecoveries] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
-  const [filters, setFilters] = useState({
+  const [shopkeepers, setShopkeepers] = useState([]);
+  const [salesmen, setSalesmen] = useState([]);
+  const [shopkeeperFilter, setShopkeeperFilter] = useState('');
+  const [salesmanFilter, setSalesmanFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [recoveryTypeFilter, setRecoveryTypeFilter] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
+
+  // Fetch function for pagination hook
+  const fetchRecoveries = useCallback(async (params) => {
+    const token = localStorage.getItem('adminToken');
+    const queryParams = new URLSearchParams({
+      page: params.page,
+      limit: params.limit,
+      ...(params.shopkeeperId && { shopkeeperId: params.shopkeeperId }),
+      ...(params.salesmanId && { salesmanId: params.salesmanId }),
+      ...(params.status && { status: params.status }),
+      ...(params.recoveryType && { recoveryType: params.recoveryType }),
+      ...(params.startDate && { startDate: params.startDate }),
+      ...(params.endDate && { endDate: params.endDate }),
+    });
+
+    const response = await axios.get(`${api.recoveries.getAll()}?${queryParams}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response;
+  }, []);
+
+  // Use pagination hook
+  const {
+    data: recoveries,
+    loading,
+    pagination,
+    handlePageChange,
+    handlePageSizeChange,
+    handleFilterChange,
+    refresh: refreshRecoveries,
+  } = usePagination(fetchRecoveries, {
     shopkeeperId: '',
     salesmanId: '',
     status: '',
     recoveryType: '',
     startDate: '',
-    endDate: '',
-    page: 1,
-    limit: 10
-  });
-  const [pagination, setPagination] = useState({});
-  const [shopkeepers, setShopkeepers] = useState([]);
-  const [salesmen, setSalesmen] = useState([]);
+    endDate: ''
+  }, 10);
 
   useEffect(() => {
-    fetchData();
     fetchShopkeepers();
     fetchSalesmen();
     fetchStats();
-  }, [filters.page, filters.limit]);
+  }, []);
 
-  // Trigger fetchData when filters change (excluding page and limit)
+  // Update filters when they change
   useEffect(() => {
-    // Only trigger if we have some filters set or if it's a page change
-    const hasActiveFilters = filters.shopkeeperId || filters.salesmanId || filters.status || 
-                           filters.recoveryType || filters.startDate || filters.endDate;
-    
-    if (hasActiveFilters || filters.page > 1) {
-      fetchData();
-    }
-  }, [filters.shopkeeperId, filters.salesmanId, filters.status, filters.recoveryType, filters.startDate, filters.endDate, filters.page]);
+    handleFilterChange('shopkeeperId', shopkeeperFilter);
+  }, [shopkeeperFilter, handleFilterChange]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('adminToken');
-      const queryParams = new URLSearchParams();
-      
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) queryParams.append(key, value);
-      });
+  useEffect(() => {
+    handleFilterChange('salesmanId', salesmanFilter);
+  }, [salesmanFilter, handleFilterChange]);
 
-      const url = `${api.recoveries.getAll()}?${queryParams}`;
-      console.log('Fetching recoveries from:', url);
-      console.log('Filters:', filters);
+  useEffect(() => {
+    handleFilterChange('status', statusFilter);
+  }, [statusFilter, handleFilterChange]);
 
-      const response = await axios.get(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+  useEffect(() => {
+    handleFilterChange('recoveryType', recoveryTypeFilter);
+  }, [recoveryTypeFilter, handleFilterChange]);
 
-      console.log('Recoveries response:', response.data);
-      setRecoveries(response.data.recoveries || []);
-      setPagination(response.data.pagination || {});
-    } catch (error) {
-      console.error('Error fetching recoveries:', error);
-      alert('Error fetching recoveries: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    handleFilterChange('startDate', startDateFilter);
+  }, [startDateFilter, handleFilterChange]);
+
+  useEffect(() => {
+    handleFilterChange('endDate', endDateFilter);
+  }, [endDateFilter, handleFilterChange]);
 
   const fetchShopkeepers = async () => {
     try {
@@ -104,25 +122,19 @@ const RecoveryManagement = () => {
     }
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
-  };
-
   const clearFilters = () => {
-    setFilters({
-      shopkeeperId: '',
-      salesmanId: '',
-      status: '',
-      recoveryType: '',
-      startDate: '',
-      endDate: '',
-      page: 1,
-      limit: 10
-    });
-    // Trigger immediate fetch with cleared filters
-    setTimeout(() => {
-      fetchData();
-    }, 100);
+    setShopkeeperFilter('');
+    setSalesmanFilter('');
+    setStatusFilter('');
+    setRecoveryTypeFilter('');
+    setStartDateFilter('');
+    setEndDateFilter('');
+    handleFilterChange('shopkeeperId', '');
+    handleFilterChange('salesmanId', '');
+    handleFilterChange('status', '');
+    handleFilterChange('recoveryType', '');
+    handleFilterChange('startDate', '');
+    handleFilterChange('endDate', '');
   };
 
   const formatCurrency = (amount) => {
@@ -139,16 +151,72 @@ const RecoveryManagement = () => {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading recovery records...</p>
-        </div>
-      </div>
-    );
-  }
+  // Define table columns
+  const columns = [
+    {
+      key: 'recoveryId',
+      header: 'Recovery ID',
+      render: (recovery) => (
+        <span className="text-sm font-medium text-gray-900">{recovery._id.slice(-8)}</span>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      render: (recovery) => (
+        <span className="text-sm text-gray-500">{formatDate(recovery.recoveryDate)}</span>
+      ),
+    },
+    {
+      key: 'shopkeeper',
+      header: 'Shopkeeper',
+      render: (recovery) => (
+        <span className="text-sm text-gray-900">{recovery.shopkeeper?.name || 'N/A'}</span>
+      ),
+    },
+    {
+      key: 'salesman',
+      header: 'Salesman',
+      render: (recovery) => (
+        <span className="text-sm text-gray-900">{recovery.salesman?.name || 'N/A'}</span>
+      ),
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      render: (recovery) => (
+        <span className={`px-2 py-1 text-xs rounded-full ${
+          recovery.recoveryType === 'payment_only' 
+            ? 'bg-blue-100 text-blue-800' 
+            : 'bg-green-100 text-green-800'
+        }`}>
+          {recovery.recoveryType === 'payment_only' ? 'Payment Only' : 'With Items'}
+        </span>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      render: (recovery) => (
+        <span className="text-sm font-medium text-gray-900">{formatCurrency(recovery.amountCollected)}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (recovery) => (
+        <span className={`px-2 py-1 text-xs rounded-full ${
+          recovery.status === 'completed' 
+            ? 'bg-green-100 text-green-800' 
+            : recovery.status === 'pending'
+            ? 'bg-yellow-100 text-yellow-800'
+            : 'bg-red-100 text-red-800'
+        }`}>
+          {recovery.status}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -223,8 +291,8 @@ const RecoveryManagement = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Shopkeeper</label>
             <select
-              value={filters.shopkeeperId}
-              onChange={(e) => handleFilterChange('shopkeeperId', e.target.value)}
+              value={shopkeeperFilter}
+              onChange={(e) => setShopkeeperFilter(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Shopkeepers</option>
@@ -239,8 +307,8 @@ const RecoveryManagement = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Salesman</label>
             <select
-              value={filters.salesmanId}
-              onChange={(e) => handleFilterChange('salesmanId', e.target.value)}
+              value={salesmanFilter}
+              onChange={(e) => setSalesmanFilter(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Salesmen</option>
@@ -255,8 +323,8 @@ const RecoveryManagement = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Recovery Type</label>
             <select
-              value={filters.recoveryType}
-              onChange={(e) => handleFilterChange('recoveryType', e.target.value)}
+              value={recoveryTypeFilter}
+              onChange={(e) => setRecoveryTypeFilter(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Types</option>
@@ -268,8 +336,8 @@ const RecoveryManagement = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
-              value={filters.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Status</option>
@@ -283,8 +351,8 @@ const RecoveryManagement = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
             <input
               type="date"
-              value={filters.startDate}
-              onChange={(e) => handleFilterChange('startDate', e.target.value)}
+              value={startDateFilter}
+              onChange={(e) => setStartDateFilter(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -293,24 +361,18 @@ const RecoveryManagement = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
             <input
               type="date"
-              value={filters.endDate}
-              onChange={(e) => handleFilterChange('endDate', e.target.value)}
+              value={endDateFilter}
+              onChange={(e) => setEndDateFilter(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
-          <div className="flex items-end space-x-4">
-            <button
-              onClick={fetchData}
-              className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              🔍  Filters
-            </button>
+          <div className="flex items-end">
             <button
               onClick={clearFilters}
-              className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+              className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
             >
-              🗑️ Clear
+              🗑️ Clear Filters
             </button>
           </div>
         </div>
@@ -322,149 +384,22 @@ const RecoveryManagement = () => {
           <h3 className="text-lg font-semibold">📋 Recovery Records ({pagination.total || 0})</h3>
         </div>
 
-        {recoveries.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="text-6xl mb-4">📭</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Recovery Records Found</h3>
-            <p className="text-gray-600">No recovery records match your current filters.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            {/* Desktop Table View */}
-            <table className="hidden sm:table w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recovery ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shopkeeper</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {recoveries.map((recovery) => (
-                  <tr key={recovery._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {recovery._id.slice(-8)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(recovery.recoveryDate)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {recovery.shopkeeper?.name || 'N/A'}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {recovery.salesman?.name || 'N/A'}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        recovery.recoveryType === 'payment_only' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {recovery.recoveryType === 'payment_only' ? 'Payment Only' : 'With Items'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(recovery.amountCollected)}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        recovery.status === 'completed' 
-                          ? 'bg-green-100 text-green-800' 
-                          : recovery.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {recovery.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Mobile Card View */}
-            <div className="sm:hidden">
-              {recoveries.map((recovery) => (
-                <div key={recovery._id} className="p-4 border-b border-gray-200">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h4 className="font-medium text-gray-900">Recovery #{recovery._id.slice(-8)}</h4>
-                      <p className="text-sm text-gray-500">{formatDate(recovery.recoveryDate)}</p>
-                    </div>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      recovery.status === 'completed' 
-                        ? 'bg-green-100 text-green-800' 
-                        : recovery.status === 'pending'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {recovery.status}
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Shopkeeper:</span>
-                      <span className="font-medium">{recovery.shopkeeper?.name || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Salesman:</span>
-                      <span className="font-medium">{recovery.salesman?.name || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Type:</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        recovery.recoveryType === 'payment_only' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {recovery.recoveryType === 'payment_only' ? 'Payment Only' : 'With Items'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Amount:</span>
-                      <span className="font-bold text-green-600">{formatCurrency(recovery.amountCollected)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          data={recoveries}
+          loading={loading}
+          emptyMessage="No recovery records found. No recovery records match your current filters."
+        />
 
         {/* Pagination */}
-        {pagination.pages > 1 && (
-          <div className="p-4 border-t bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                Showing {((pagination.current - 1) * pagination.limit) + 1} to {Math.min(pagination.current * pagination.limit, pagination.total)} of {pagination.total} results
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleFilterChange('page', pagination.current - 1)}
-                  disabled={pagination.current <= 1}
-                  className="px-3 py-1 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                >
-                  Previous
-                </button>
-                <span className="px-3 py-1 bg-blue-500 text-white rounded-lg">
-                  {pagination.current}
-                </span>
-                <button
-                  onClick={() => handleFilterChange('page', pagination.current + 1)}
-                  disabled={pagination.current >= pagination.pages}
-                  className="px-3 py-1 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={pagination.current}
+          totalPages={pagination.pages}
+          totalItems={pagination.total}
+          pageSize={pagination.pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </div>
     </div>
   );

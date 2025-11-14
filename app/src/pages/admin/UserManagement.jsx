@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { api } from '../../utils/api';
+import DataTable from '../../components/common/DataTable';
+import Pagination from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 export default function UserManagement() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [cities, setCities] = useState([]);
   const [selectedCityFilter, setSelectedCityFilter] = useState('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -23,32 +26,54 @@ export default function UserManagement() {
     creditLimit: 0
   });
 
+  // Fetch function for pagination hook
+  const fetchUsers = useCallback(async (params) => {
+    const token = localStorage.getItem('adminToken');
+    const queryParams = new URLSearchParams({
+      page: params.page,
+      limit: params.limit,
+      ...(params.search && { search: params.search }),
+      ...(params.role && { role: params.role }),
+      ...(params.city && { city: params.city }),
+    });
+
+    const response = await axios.get(`${api.users.getAll()}?${queryParams}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response;
+  }, []);
+
+  // Use pagination hook
+  const {
+    data: users,
+    loading,
+    pagination,
+    handlePageChange,
+    handlePageSizeChange,
+    handleFilterChange,
+    refresh: refreshUsers,
+  } = usePagination(fetchUsers, { search: '', role: '', city: '' }, 20);
+
   useEffect(() => {
-    fetchUsers();
     fetchCities();
   }, []);
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('adminToken');
-      const params = {};
-      if (selectedCityFilter) {
-        params.role = 'shopkeeper';
-        params.city = selectedCityFilter;
-      }
-      const response = await axios.get(api.users.getAll(), {
-        headers: { 'Authorization': `Bearer ${token}` }
-        , params
-      });
-      setUsers(response.data.users || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      alert('Error loading users: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Update filters when search/role/city changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleFilterChange('search', searchTerm);
+    }, searchTerm ? 500 : 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, handleFilterChange]);
+
+  useEffect(() => {
+    handleFilterChange('role', selectedRoleFilter);
+  }, [selectedRoleFilter, handleFilterChange]);
+
+  useEffect(() => {
+    handleFilterChange('city', selectedCityFilter);
+  }, [selectedCityFilter, handleFilterChange]);
 
   const fetchCities = async () => {
     try {
@@ -100,7 +125,7 @@ export default function UserManagement() {
         pendingAmount: 0,
         creditLimit: 0
       });
-      fetchUsers();
+      refreshUsers();
     } catch (error) {
       console.error('Error saving user:', error);
       alert('Error saving user: ' + (error.response?.data?.error || error.message));
@@ -139,7 +164,7 @@ export default function UserManagement() {
       });
 
       alert('User deleted successfully!');
-      fetchUsers();
+      refreshUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
       alert('Error deleting user: ' + (error.response?.data?.error || error.message));
@@ -163,13 +188,81 @@ export default function UserManagement() {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading users...</div>
-      </div>
-    );
-  }
+  // Define table columns
+  const columns = [
+    {
+      key: 'user',
+      header: 'User',
+      render: (user) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900">{user.name}</div>
+          <div className="text-sm text-gray-500">{user.email}</div>
+          {user.territory && (
+            <div className="text-xs text-gray-400">{user.territory}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (user) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+          user.role === 'superadmin' ? 'bg-purple-100 text-purple-800' :
+          user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
+          user.role === 'salesman' ? 'bg-green-100 text-green-800' :
+          'bg-yellow-100 text-yellow-800'
+        }`}>
+          {user.role}
+        </span>
+      ),
+    },
+    {
+      key: 'contact',
+      header: 'Contact',
+      render: (user) => (
+        <div className="text-sm text-gray-500">
+          <div>{user.phone}</div>
+          <div className="text-xs">{user.address}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'pendingAmount',
+      header: 'Pending Amount',
+      render: (user) => (
+        <span className="text-sm text-gray-900">
+          {user.role === 'shopkeeper' ? `PKR${(user.pendingAmount || 0).toFixed(2)}` : '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'creditLimit',
+      header: 'Credit Limit',
+      render: (user) => (
+        <span className="text-sm text-gray-900">
+          {user.role === 'shopkeeper' ? `PKR${(user.creditLimit || 0).toFixed(2)}` : '-'}
+        </span>
+      ),
+    },
+  ];
+
+  const rowActions = (user) => (
+    <div className="flex gap-2">
+      <button
+        onClick={() => handleEdit(user)}
+        className="text-blue-600 hover:text-blue-900"
+      >
+        Edit
+      </button>
+      <button
+        onClick={() => handleDelete(user._id)}
+        className="text-red-600 hover:text-red-900"
+      >
+        Delete
+      </button>
+    </div>
+  );
 
   return (
     <div className="p-6">
@@ -186,33 +279,60 @@ export default function UserManagement() {
         </button>
       </div>
 
-      {/* City Filter for Shopkeepers */}
-      <div className="bg-white rounded-lg p-4 mb-4 flex items-end gap-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Filter Shopkeepers by City</label>
-          <select
-            value={selectedCityFilter}
-            onChange={(e) => setSelectedCityFilter(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All (no city filter)</option>
-            {cities.map((c) => (
-              <option key={c._id} value={c._id}>{c.name}</option>
-            ))}
-          </select>
+      {/* Filters */}
+      <div className="bg-white rounded-lg p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <input
+              type="text"
+              placeholder="Search by name, email, phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+            <select
+              value={selectedRoleFilter}
+              onChange={(e) => setSelectedRoleFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Roles</option>
+              <option value="shopkeeper">Shopkeeper</option>
+              <option value="salesman">Salesman</option>
+              <option value="admin">Admin</option>
+              <option value="superadmin">Super Admin</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+            <select
+              value={selectedCityFilter}
+              onChange={(e) => setSelectedCityFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Cities</option>
+              {cities.map((c) => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="mt-4">
           <button
-            onClick={fetchUsers}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            Apply
-          </button>
-          <button
-            onClick={() => { setSelectedCityFilter(''); fetchUsers(); }}
+            onClick={() => {
+              setSearchTerm('');
+              setSelectedRoleFilter('');
+              setSelectedCityFilter('');
+              handleFilterChange('search', '');
+              handleFilterChange('role', '');
+              handleFilterChange('city', '');
+            }}
             className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
           >
-            Clear
+            Clear Filters
           </button>
         </div>
       </div>
@@ -391,89 +511,23 @@ export default function UserManagement() {
       )}
 
       {/* Users List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {users.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No users found. Create your first user above.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pending Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Credit Limit
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
-                  <tr key={user._id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                        <div className="text-sm text-gray-500">{user.email}</div>
-                        {user.territory && (
-                          <div className="text-xs text-gray-400">{user.territory}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.role === 'superadmin' ? 'bg-purple-100 text-purple-800' :
-                        user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
-                        user.role === 'salesman' ? 'bg-green-100 text-green-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div>{user.phone}</div>
-                      <div className="text-xs">{user.address}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.role === 'shopkeeper' ? `PKR${(user.pendingAmount || 0).toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.role === 'shopkeeper' ? `PKR${(user.creditLimit || 0).toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEdit(user)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(user._id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        data={users}
+        loading={loading}
+        rowActions={rowActions}
+        emptyMessage="No users found. Create your first user above."
+      />
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={pagination.current}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        pageSize={pagination.pageSize}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
     </div>
   );
 }

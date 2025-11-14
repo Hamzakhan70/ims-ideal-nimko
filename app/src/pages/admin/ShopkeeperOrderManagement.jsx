@@ -1,74 +1,95 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { api } from '../../utils/api';
+import DataTable from '../../components/common/DataTable';
+import Pagination from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 export default function ShopkeeperOrderManagement() {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    status: '',
-    paymentStatus: '',
-    search: '',
-    startDate: '',
-    endDate: ''
-  });
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pages: 1,
-    total: 0
-  });
+  const [statusFilter, setStatusFilter] = useState('');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
+
+  // Fetch function for pagination hook
+  const fetchOrders = useCallback(async (params) => {
+    const token = localStorage.getItem('adminToken');
+    const queryParams = new URLSearchParams({
+      page: params.page,
+      limit: params.limit,
+      ...(params.status && { status: params.status }),
+      ...(params.paymentStatus && { paymentStatus: params.paymentStatus }),
+      ...(params.startDate && { startDate: params.startDate }),
+      ...(params.endDate && { endDate: params.endDate }),
+    });
+
+    const response = await axios.get(`${api.shopkeeperOrders?.getAll() || '/api/shopkeeper-orders'}?${queryParams}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response;
+  }, []);
+
+  // Use pagination hook
+  const {
+    data: orders,
+    loading,
+    pagination,
+    handlePageChange,
+    handlePageSizeChange,
+    handleFilterChange,
+    refresh: refreshOrders,
+  } = usePagination(fetchOrders, { status: '', paymentStatus: '', startDate: '', endDate: '' }, 10);
+
+  // Update filters when they change
+  useEffect(() => {
+    handleFilterChange('status', statusFilter);
+  }, [statusFilter, handleFilterChange]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [filters, pagination.current]);
+    handleFilterChange('paymentStatus', paymentStatusFilter);
+  }, [paymentStatusFilter, handleFilterChange]);
 
-  const fetchOrders = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: pagination.current,
-        limit: 10,
-        ...filters
-      });
+  useEffect(() => {
+    handleFilterChange('startDate', startDateFilter);
+  }, [startDateFilter, handleFilterChange]);
 
-      const response = await axios.get(`http://localhost:5000/api/shopkeeper-orders?${params}`);
-      setOrders(response.data.orders);
-      setPagination(response.data.pagination);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    handleFilterChange('endDate', endDateFilter);
+  }, [endDateFilter, handleFilterChange]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     try {
-      await axios.put(`http://localhost:5000/api/shopkeeper-orders/${orderId}/status`, 
+      const token = localStorage.getItem('adminToken');
+      await axios.put(api.shopkeeperOrders.updateStatus(orderId), 
         { status: newStatus },
         {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+            'Authorization': `Bearer ${token}`
           }
         }
       );
-      fetchOrders();
+      refreshOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
+      alert('Error updating order status: ' + (error.response?.data?.error || error.message));
     }
   };
 
   const handlePaymentUpdate = async (orderId, paymentStatus) => {
     try {
-      await axios.put(`http://localhost:5000/api/shopkeeper-orders/${orderId}/payment`, 
+      const token = localStorage.getItem('adminToken');
+      await axios.put(api.shopkeeperOrders.updatePayment(orderId), 
         { paymentStatus },
         {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+            'Authorization': `Bearer ${token}`
           }
         }
       );
-      fetchOrders();
+      refreshOrders();
     } catch (error) {
       console.error('Error updating payment status:', error);
+      alert('Error updating payment status: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -111,13 +132,100 @@ export default function ShopkeeperOrderManagement() {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="text-xl">Loading orders...</div>
-      </div>
-    );
-  }
+  // Define table columns
+  const columns = [
+    {
+      key: 'order',
+      header: 'Order',
+      render: (order) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900">#{order._id.slice(-8)}</div>
+          <div className="text-sm text-gray-500">{formatDate(order.orderDate)}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'customer',
+      header: 'Customer',
+      render: (order) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900">{order.shopkeeper?.name || 'N/A'}</div>
+          <div className="text-sm text-gray-500">{order.shopkeeper?.email || ''}</div>
+          <div className="text-sm text-gray-500">{order.shopkeeper?.phone || ''}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'items',
+      header: 'Items',
+      render: (order) => (
+        <div>
+          <div className="text-sm text-gray-900">
+            {order.items?.length || 0} item(s)
+          </div>
+          <div className="text-sm text-gray-500">
+            {order.items?.slice(0, 2).map(item => item.product?.name || 'N/A').join(', ')}
+            {order.items?.length > 2 && '...'}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      render: (order) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900">{formatCurrency(order.totalAmount)}</div>
+          <div className="text-sm text-gray-500">Commission: {formatCurrency(order.commission || 0)}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (order) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
+          {order.status}
+        </span>
+      ),
+    },
+    {
+      key: 'payment',
+      header: 'Payment',
+      render: (order) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(order.paymentStatus)}`}>
+          {order.paymentStatus}
+        </span>
+      ),
+    },
+  ];
+
+  const rowActions = (order) => (
+    <div className="flex flex-col gap-2">
+      <select
+        value={order.status}
+        onChange={(e) => handleStatusUpdate(order._id, e.target.value)}
+        className="text-xs border border-gray-300 rounded px-2 py-1"
+      >
+        <option value="pending">Pending</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="processing">Processing</option>
+        <option value="shipped">Shipped</option>
+        <option value="delivered">Delivered</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <select
+        value={order.paymentStatus}
+        onChange={(e) => handlePaymentUpdate(order._id, e.target.value)}
+        className="text-xs border border-gray-300 rounded px-2 py-1"
+      >
+        <option value="pending">Pending</option>
+        <option value="paid">Paid</option>
+        <option value="partial">Partial</option>
+        <option value="overdue">Overdue</option>
+      </select>
+    </div>
+  );
 
   return (
     <div className="p-8">
@@ -126,22 +234,12 @@ export default function ShopkeeperOrderManagement() {
         
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={filters.search}
-                onChange={(e) => setFilters({...filters, search: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
-              />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
-                value={filters.status}
-                onChange={(e) => setFilters({...filters, status: e.target.value})}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               >
                 <option value="">All Status</option>
@@ -156,8 +254,8 @@ export default function ShopkeeperOrderManagement() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
               <select
-                value={filters.paymentStatus}
-                onChange={(e) => setFilters({...filters, paymentStatus: e.target.value})}
+                value={paymentStatusFilter}
+                onChange={(e) => setPaymentStatusFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               >
                 <option value="">All Payment</option>
@@ -171,8 +269,8 @@ export default function ShopkeeperOrderManagement() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
                 type="date"
-                value={filters.startDate}
-                onChange={(e) => setFilters({...filters, startDate: e.target.value})}
+                value={startDateFilter}
+                onChange={(e) => setStartDateFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
@@ -180,126 +278,50 @@ export default function ShopkeeperOrderManagement() {
               <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
               <input
                 type="date"
-                value={filters.endDate}
-                onChange={(e) => setFilters({...filters, endDate: e.target.value})}
+                value={endDateFilter}
+                onChange={(e) => setEndDateFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={() => {
+                setStatusFilter('');
+                setPaymentStatusFilter('');
+                setStartDateFilter('');
+                setEndDateFilter('');
+                handleFilterChange('status', '');
+                handleFilterChange('paymentStatus', '');
+                handleFilterChange('startDate', '');
+                handleFilterChange('endDate', '');
+              }}
+              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Clear Filters
+            </button>
           </div>
         </div>
       </div>
 
       {/* Orders Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {orders.map((order) => (
-              <tr key={order._id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">#{order._id.slice(-8)}</div>
-                    <div className="text-sm text-gray-500">{formatDate(order.orderDate)}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{order.shopkeeper.name}</div>
-                    <div className="text-sm text-gray-500">{order.shopkeeper.email}</div>
-                    <div className="text-sm text-gray-500">{order.shopkeeper.phone}</div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm text-gray-900">
-                    {order.items.length} item(s)
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {order.items.slice(0, 2).map(item => item.product.name).join(', ')}
-                    {order.items.length > 2 && '...'}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">{formatCurrency(order.totalAmount)}</div>
-                  <div className="text-sm text-gray-500">Commission: {formatCurrency(order.commission)}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(order.paymentStatus)}`}>
-                    {order.paymentStatus}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <select
-                    value={order.status}
-                    onChange={(e) => handleStatusUpdate(order._id, e.target.value)}
-                    className="text-xs border border-gray-300 rounded px-2 py-1"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="processing">Processing</option>
-                    <option value="shipped">Shipped</option>
-                    <option value="delivered">Delivered</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <select
-                    value={order.paymentStatus}
-                    onChange={(e) => handlePaymentUpdate(order._id, e.target.value)}
-                    className="text-xs border border-gray-300 rounded px-2 py-1"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid</option>
-                    <option value="partial">Partial</option>
-                    <option value="overdue">Overdue</option>
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {orders.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No orders found</p>
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        data={orders}
+        loading={loading}
+        rowActions={rowActions}
+        emptyMessage="No orders found."
+      />
 
       {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="flex justify-center items-center space-x-2 mt-6">
-          <button
-            onClick={() => setPagination({...pagination, current: pagination.current - 1})}
-            disabled={pagination.current === 1}
-            className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="px-4 py-2">
-            Page {pagination.current} of {pagination.pages}
-          </span>
-          <button
-            onClick={() => setPagination({...pagination, current: pagination.current + 1})}
-            disabled={pagination.current === pagination.pages}
-            className="px-3 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      )}
+      <Pagination
+        currentPage={pagination.current}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        pageSize={pagination.pageSize}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
     </div>
   );
 }

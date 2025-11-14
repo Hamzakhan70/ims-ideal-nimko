@@ -22,22 +22,32 @@ export const NotificationProvider = ({ children }) => {
     try {
       setLoading(true);
       const token = localStorage.getItem('adminToken');
-      console.log('Fetching notifications with token:', !!token);
       
       if (!token) {
-        console.log('No admin token found, skipping notification fetch');
         return;
       }
       
       const response = await axios.get(api.notifications.getAll(), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      console.log('Notifications response:', response.data);
-      setNotifications(response.data.notifications || []);
-      setUnreadCount(response.data.unreadCount || 0);
+      
+      if (response.data && response.data.success) {
+        setNotifications(response.data.notifications || []);
+        setUnreadCount(response.data.unreadCount || 0);
+      } else {
+        console.error('Unexpected notification response format:', response.data);
+        setNotifications([]);
+        setUnreadCount(0);
+      }
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+      }
       // Don't show error to user, just log it
+      setNotifications([]);
+      setUnreadCount(0);
     } finally {
       setLoading(false);
     }

@@ -36,13 +36,34 @@ router.get("/", async (req, res) => {
 // @access  Private (Super Admin)
 router.get("/all", authenticateToken, requireSuperAdmin, async (req, res) => {
   try {
-    const categories = await Category.find()
-      .populate('createdBy', 'name email')
-      .sort({ sortOrder: 1, name: 1 });
+    const { page = 1, limit = 10, search } = req.query;
+    const pageNumber = Math.max(parseInt(page) || 1, 1);
+    const limitNumber = Math.max(parseInt(limit) || 10, 1);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const query = {};
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+    }
+
+    const [categories, total] = await Promise.all([
+      Category.find(query)
+        .populate('createdBy', 'name email')
+        .sort({ sortOrder: 1, name: 1 })
+        .skip(skip)
+        .limit(limitNumber),
+      Category.countDocuments(query)
+    ]);
 
     res.json({
       success: true,
-      categories
+      categories,
+      pagination: {
+        current: pageNumber,
+        pages: Math.ceil(total / limitNumber) || 1,
+        total,
+        limit: limitNumber
+      }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

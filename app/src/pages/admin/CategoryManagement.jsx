@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { api } from '../../utils/api';
+import DataTable from '../../components/common/DataTable';
+import Pagination from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 export default function CategoryManagement() {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -16,25 +18,40 @@ export default function CategoryManagement() {
     sortOrder: 0
   });
 
-  useEffect(() => {
-    fetchCategories();
+  // Fetch function for pagination hook
+  const fetchCategories = useCallback(async (params) => {
+    const token = localStorage.getItem('adminToken');
+    const queryParams = new URLSearchParams({
+      page: params.page,
+      limit: params.limit,
+      ...(params.search && { search: params.search }),
+    });
+
+    const response = await axios.get(`${api.categories.getAllForAdmin()}?${queryParams}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response;
   }, []);
 
-  const fetchCategories = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('adminToken');
-      const response = await axios.get(api.categories.getAllForAdmin(), {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setCategories(response.data.categories || []);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      alert('Error loading categories: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Use pagination hook
+  const {
+    data: categories,
+    loading,
+    pagination,
+    handlePageChange,
+    handlePageSizeChange,
+    handleFilterChange,
+    refresh: refreshCategories,
+  } = usePagination(fetchCategories, { search: '' }, 20);
+
+  // Update filters when search changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleFilterChange('search', searchTerm);
+    }, searchTerm ? 500 : 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, handleFilterChange]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,7 +70,7 @@ export default function CategoryManagement() {
       setShowForm(false);
       setEditingCategory(null);
       setFormData({ name: '', description: '', icon: '', color: '#3B82F6', sortOrder: 0 });
-      fetchCategories();
+      refreshCategories();
     } catch (error) {
       console.error('Error saving category:', error);
       alert('Error saving category: ' + (error.response?.data?.error || error.message));
@@ -86,7 +103,7 @@ export default function CategoryManagement() {
       });
 
       alert('Category deleted successfully!');
-      fetchCategories();
+      refreshCategories();
     } catch (error) {
       console.error('Error deleting category:', error);
       alert('Error deleting category: ' + (error.response?.data?.error || error.message));
@@ -101,7 +118,7 @@ export default function CategoryManagement() {
       });
 
       alert('Category status updated successfully!');
-      fetchCategories();
+      refreshCategories();
     } catch (error) {
       console.error('Error toggling category:', error);
       alert('Error updating category: ' + (error.response?.data?.error || error.message));
@@ -114,13 +131,86 @@ export default function CategoryManagement() {
     setFormData({ name: '', description: '', icon: '', color: '#3B82F6', sortOrder: 0 });
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading categories...</div>
-      </div>
-    );
-  }
+  // Define table columns
+  const columns = [
+    {
+      key: 'category',
+      header: 'Category',
+      render: (category) => (
+        <div className="flex items-center">
+          {category.icon && (
+            <span className="text-2xl mr-3">{category.icon}</span>
+          )}
+          <div>
+            <div className="text-sm font-medium text-gray-900 flex items-center">
+              <div 
+                className="w-4 h-4 rounded-full mr-2" 
+                style={{ backgroundColor: category.color }}
+              ></div>
+              {category.name}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'description',
+      header: 'Description',
+      render: (category) => (
+        <span className="text-sm text-gray-500">{category.description || '-'}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (category) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+          category.isActive 
+            ? 'bg-green-100 text-green-800' 
+            : 'bg-red-100 text-red-800'
+        }`}>
+          {category.isActive ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'sortOrder',
+      header: 'Sort Order',
+      render: (category) => (
+        <span className="text-sm text-gray-900">{category.sortOrder}</span>
+      ),
+    },
+    {
+      key: 'createdBy',
+      header: 'Created By',
+      render: (category) => (
+        <span className="text-sm text-gray-500">{category.createdBy?.name || '-'}</span>
+      ),
+    },
+  ];
+
+  const rowActions = (category) => (
+    <div className="flex gap-2">
+      <button
+        onClick={() => handleEdit(category)}
+        className="text-blue-600 hover:text-blue-900"
+      >
+        Edit
+      </button>
+      <button
+        onClick={() => handleToggle(category._id)}
+        className={`${category.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
+      >
+        {category.isActive ? 'Deactivate' : 'Activate'}
+      </button>
+      <button
+        onClick={() => handleDelete(category._id)}
+        className="text-red-600 hover:text-red-900"
+      >
+        Delete
+      </button>
+    </div>
+  );
 
   return (
     <div className="p-6">
@@ -132,6 +222,33 @@ export default function CategoryManagement() {
         >
           Create New Category
         </button>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <input
+              type="text"
+              placeholder="Search categories..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                handleFilterChange('search', '');
+              }}
+              className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Category Form Modal */}
@@ -234,100 +351,23 @@ export default function CategoryManagement() {
       )}
 
       {/* Categories List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {categories.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No categories found. Create your first category above.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Category
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sort Order
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created By
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {categories.map((category) => (
-                  <tr key={category._id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {category.icon && (
-                          <span className="text-2xl mr-3">{category.icon}</span>
-                        )}
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 flex items-center">
-                            <div 
-                              className="w-4 h-4 rounded-full mr-2" 
-                              style={{ backgroundColor: category.color }}
-                            ></div>
-                            {category.name}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {category.description || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        category.isActive 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {category.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {category.sortOrder}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {category.createdBy?.name || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEdit(category)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleToggle(category._id)}
-                        className={`${category.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
-                      >
-                        {category.isActive ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(category._id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        data={categories}
+        loading={loading}
+        rowActions={rowActions}
+        emptyMessage="No categories found. Create your first category above."
+      />
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={pagination.current}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        pageSize={pagination.pageSize}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
     </div>
   );
 }

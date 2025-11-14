@@ -1,16 +1,22 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import axios from 'axios';
 import {API_BASE_URL, api} from '../../utils/api';
+import Pagination from '../../components/common/Pagination';
+import {usePagination} from '../../hooks/usePagination';
 
 // Helper to get base URL for static assets (without /api)
+// Note: Cloudinary URLs are already absolute, so this is only for backward compatibility
 const getImageBaseUrl = () => {
     const base = API_BASE_URL.replace(/\/api\/?$/, '');
     return base;
 };
 
+// Helper to check if URL is already absolute (Cloudinary or external)
+const isAbsoluteUrl = (url) => {
+    return url && (url.startsWith('http://') || url.startsWith('https://'));
+};
+
 export default function ProductManagement() {
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [formData, setFormData] = useState({
@@ -30,21 +36,56 @@ export default function ProductManagement() {
     const [newLink, setNewLink] = useState('');
     const [uploadingImages, setUploadingImages] = useState(false);
 
+    // Fetch function for pagination hook
+    const fetchProducts = useCallback(async (params) => {
+        const queryParams = new URLSearchParams({
+            page: params.page,
+            limit: params.limit,
+            ...(params.search && {
+                search: params.search
+            }),
+            ...(params.category && {
+                category: params.category
+            })
+        });
+
+        const response = await axios.get(`${
+            api.products.getAll()
+        }?${queryParams}`);
+        return response;
+    }, []);
+
+    // Use pagination hook
+    const {
+        data: products,
+        loading,
+        pagination,
+        filters,
+        handlePageChange,
+        handlePageSizeChange,
+        handleFilterChange,
+        refresh: refreshProducts
+    } = usePagination(fetchProducts, {
+        search: '',
+        category: ''
+    }, 20);
+
     useEffect(() => {
-        fetchProducts();
         fetchCategories();
     }, []);
 
-    const fetchProducts = async () => {
-        try { // Fetch all products by setting a high limit for admin management
-            const response = await axios.get(api.products.getAll() + '?limit=1000');
-            setProducts(response.data.products || response.data);
-        } catch (error) {
-            console.error('Error fetching products:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Update filters when search/category changes (with debounce for search)
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            handleFilterChange('search', searchTerm);
+        }, searchTerm ? 500 : 0); // Debounce search by 500ms, immediate for clearing
+
+        return() => clearTimeout(timeoutId);
+    }, [searchTerm, handleFilterChange]);
+
+    useEffect(() => {
+        handleFilterChange('category', selectedCategory);
+    }, [selectedCategory, handleFilterChange]);
 
     const fetchCategories = async () => {
         try {
@@ -99,12 +140,12 @@ export default function ProductManagement() {
         };
 
         // If no imageURL but we have uploaded images, use the first uploaded image as main image
+        // Cloudinary returns full URLs, so use directly if absolute, otherwise prepend base URL
         if (! submitData.imageURL && submitData.additionalImages.length > 0) {
-            submitData.imageURL = `${
+            const firstImage = submitData.additionalImages[0];
+            submitData.imageURL = isAbsoluteUrl(firstImage) ? firstImage : `${
                 getImageBaseUrl()
-            }${
-                submitData.additionalImages[0]
-            }`;
+            }${firstImage}`;
         }
 
         try {
@@ -125,7 +166,7 @@ export default function ProductManagement() {
             setShowModal(false);
             setEditingProduct(null);
             resetForm();
-            fetchProducts();
+            refreshProducts();
         } catch (error) {
             console.error('Error saving product:', error);
         }
@@ -156,7 +197,7 @@ export default function ProductManagement() {
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                fetchProducts();
+                refreshProducts();
             } catch (error) {
                 console.error('Error deleting product:', error);
             }
@@ -206,19 +247,27 @@ export default function ProductManagement() {
             return;
         
 
+
         setUploadingImages(true);
         try {
+            const token = localStorage.getItem('adminToken');
+            if (! token) {
+                alert('Please log in to upload images');
+                setUploadingImages(false);
+                return;
+            }
+
             const formData = new FormData();
             files.forEach(file => {
                 formData.append('images', file);
             });
 
+            console.log('Uploading images with token:', token ? 'Token present' : 'No token');
+
             const response = await axios.post(api.products.uploadImages(), formData, {
                 headers: {
-                    'Content-Type': 'multipart/form-data',
-                    'Authorization': `Bearer ${
-                        localStorage.getItem('adminToken')
-                    }`
+                    'Authorization': `Bearer ${token}`
+                    // Don't set Content-Type - let axios set it automatically for FormData
                 }
             });
 
@@ -231,6 +280,17 @@ export default function ProductManagement() {
             }));
         } catch (error) {
             console.error('Error uploading images:', error);
+            console.error('Error response:', error.response ?. data);
+            console.error('Error status:', error.response ?. status);
+            if (error.response ?. status === 403) {
+                alert('Authentication failed. Please log in again.');
+            } else if (error.response ?. status === 401) {
+                alert('Session expired. Please log in again.');
+            } else {
+                alert('Failed to upload images: ' + (
+                    error.response ?. data ?. error || error.message
+                ));
+            }
         } finally {
             setUploadingImages(false);
         }
@@ -245,19 +305,8 @@ export default function ProductManagement() {
         });
     };
 
-    const filteredProducts = products.filter(product => {
-        const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.description.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = !selectedCategory || product.category === selectedCategory;
-        return matchesSearch && matchesCategory;
-    });
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center min-h-screen">
-                <div className="text-xl">Loading products...</div>
-            </div>
-        );
-    }
+    // Products are already filtered by the API based on pagination filters
+    // No need for client-side filtering
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -323,6 +372,8 @@ export default function ProductManagement() {
                                     () => {
                                         setSearchTerm('');
                                         setSelectedCategory('');
+                                        handleFilterChange('search', '');
+                                        handleFilterChange('category', '');
                                     }
                                 }
                                 className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
@@ -333,135 +384,156 @@ export default function ProductManagement() {
                 </div>
 
                 {/* Products Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {
-                    filteredProducts.map((product) => (
-                        <div key={
-                                product._id
-                            }
-                            className="bg-white rounded-lg shadow overflow-hidden">
-                            <img src={
-                                    product.imageURL && product.imageURL.startsWith('http') ? product.imageURL : (product.imageURL ? `${
-                                        getImageBaseUrl()
-                                    }${
-                                        product.imageURL
-                                    }` : '')
+                {
+                loading ? (
+                    <div className="flex justify-center items-center py-12">
+                        <div className="text-xl">Loading products...</div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {
+                        products.map((product) => (
+                            <div key={
+                                    product._id
                                 }
-                                alt={
-                                    product.name
-                                }
-                                className="w-full h-48 object-cover"/>
-                            <div className="p-6">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="text-lg font-semibold text-gray-900">
-                                        {
+                                className="bg-white rounded-lg shadow overflow-hidden">
+                                <img src={
+                                        isAbsoluteUrl(product.imageURL) ? product.imageURL : (product.imageURL ? `${
+                                            getImageBaseUrl()
+                                        }${
+                                            product.imageURL
+                                        }` : '')
+                                    }
+                                    alt={
                                         product.name
-                                    }</h3>
+                                    }
+                                    className="w-full h-48 object-cover"/>
+                                <div className="p-6">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="text-lg font-semibold text-gray-900">
+                                            {
+                                            product.name
+                                        }</h3>
+                                        {
+                                        product.featured && (
+                                            <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">
+                                                Featured
+                                            </span>
+                                        )
+                                    } </div>
+                                    <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                                        {
+                                        product.description
+                                    }</p>
+
+                                    {/* Product Links */}
                                     {
-                                    product.featured && (
-                                        <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">
-                                            Featured
-                                        </span>
+                                    product.productLinks && product.productLinks.length > 0 && (
+                                        <div className="mb-3">
+                                            <p className="text-xs font-medium text-gray-500 mb-1">Product Links:</p>
+                                            <div className="space-y-1">
+                                                {
+                                                product.productLinks.slice(0, 2).map((link, index) => (
+                                                    <a key={index}
+                                                        href={link}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-blue-600 text-xs hover:underline block truncate">
+                                                        {link} </a>
+                                                ))
+                                            }
+                                                {
+                                                product.productLinks.length > 2 && (
+                                                    <span className="text-xs text-gray-500">+{
+                                                        product.productLinks.length - 2
+                                                    }
+                                                        more</span>
+                                                )
+                                            } </div>
+                                        </div>
                                     )
-                                } </div>
-                                <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                                }
+                                    {/* Additional Images */}
                                     {
-                                    product.description
-                                }</p>
+                                    product.additionalImages && product.additionalImages.length > 0 && (
+                                        <div className="mb-3">
+                                            <p className="text-xs font-medium text-gray-500 mb-1">Additional Images:</p>
+                                            <div className="flex space-x-1">
+                                                {
+                                                product.additionalImages.slice(0, 3).map((imageUrl, index) => (
+                                                    <img key={index}
+                                                        src={
+                                                            isAbsoluteUrl(imageUrl) ? imageUrl : `${
+                                                                getImageBaseUrl()
+                                                            }${imageUrl}`
+                                                        }
+                                                        alt={
+                                                            `${
+                                                                product.name
+                                                            } ${
+                                                                index + 1
+                                                            }`
+                                                        }
+                                                        className="w-8 h-8 object-cover rounded"/>
+                                                ))
+                                            }
+                                                {
+                                                product.additionalImages.length > 3 && (
+                                                    <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
+                                                        +{
+                                                        product.additionalImages.length - 3
+                                                    } </div>
+                                                )
+                                            } </div>
+                                        </div>
+                                    )
+                                }
 
-                                {/* Product Links */}
-                                {
-                                product.productLinks && product.productLinks.length > 0 && (
-                                    <div className="mb-3">
-                                        <p className="text-xs font-medium text-gray-500 mb-1">Product Links:</p>
-                                        <div className="space-y-1">
-                                            {
-                                            product.productLinks.slice(0, 2).map((link, index) => (
-                                                <a key={index}
-                                                    href={link}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-600 text-xs hover:underline block truncate">
-                                                    {link} </a>
-                                            ))
-                                        }
-                                            {
-                                            product.productLinks.length > 2 && (
-                                                <span className="text-xs text-gray-500">+{
-                                                    product.productLinks.length - 2
-                                                }
-                                                    more</span>
-                                            )
-                                        } </div>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <span className="text-2xl font-bold text-yellow-600">PKR {
+                                            product.price
+                                        }</span>
+                                        <span className="text-sm text-gray-500">Stock: {
+                                            product.stock
+                                        }</span>
                                     </div>
-                                )
-                            }
-
-                                {/* Additional Images */}
-                                {
-                                product.additionalImages && product.additionalImages.length > 0 && (
-                                    <div className="mb-3">
-                                        <p className="text-xs font-medium text-gray-500 mb-1">Additional Images:</p>
-                                        <div className="flex space-x-1">
-                                            {
-                                            product.additionalImages.slice(0, 3).map((imageUrl, index) => (
-                                                <img key={index}
-                                                    src={
-                                                        `${
-                                                            getImageBaseUrl()
-                                                        }${imageUrl}`
-                                                    }
-                                                    alt={
-                                                        `${
-                                                            product.name
-                                                        } ${
-                                                            index + 1
-                                                        }`
-                                                    }
-                                                    className="w-8 h-8 object-cover rounded"/>
-                                            ))
-                                        }
-                                            {
-                                            product.additionalImages.length > 3 && (
-                                                <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
-                                                    +{
-                                                    product.additionalImages.length - 3
-                                                } </div>
-                                            )
-                                        } </div>
+                                    <div className="flex space-x-2">
+                                        <button onClick={
+                                                () => handleEdit(product)
+                                            }
+                                            className="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm">
+                                            Edit
+                                        </button>
+                                        <button onClick={
+                                                () => handleDelete(product._id)
+                                            }
+                                            className="flex-1 bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm">
+                                            Delete
+                                        </button>
                                     </div>
-                                )
-                            }
-
-                                <div className="flex justify-between items-center mb-4">
-                                    <span className="text-2xl font-bold text-yellow-600">PKR {
-                                        product.price
-                                    }</span>
-                                    <span className="text-sm text-gray-500">Stock: {
-                                        product.stock
-                                    }</span>
-                                </div>
-                                <div className="flex space-x-2">
-                                    <button onClick={
-                                            () => handleEdit(product)
-                                        }
-                                        className="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm">
-                                        Edit
-                                    </button>
-                                    <button onClick={
-                                            () => handleDelete(product._id)
-                                        }
-                                        className="flex-1 bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition-colors text-sm">
-                                        Delete
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    ))
-                } </div>
+                        ))
+                    } </div>
+                )
+            }
 
-                {
-                filteredProducts.length === 0 && (
+                {/* Pagination */}
+                <Pagination currentPage={
+                        pagination.current
+                    }
+                    totalPages={
+                        pagination.pages
+                    }
+                    totalItems={
+                        pagination.total
+                    }
+                    pageSize={
+                        pagination.pageSize
+                    }
+                    onPageChange={handlePageChange}
+                    onPageSizeChange={handlePageSizeChange}/> {
+                products.length === 0 && !loading && (
                     <div className="text-center py-12">
                         <p className="text-gray-500 text-lg">No products found</p>
                     </div>
@@ -719,7 +791,7 @@ export default function ProductManagement() {
                                                 <div key={index}
                                                     className="relative">
                                                     <img src={
-                                                            `${
+                                                            isAbsoluteUrl(imageUrl) ? imageUrl : `${
                                                                 getImageBaseUrl()
                                                             }${imageUrl}`
                                                         }

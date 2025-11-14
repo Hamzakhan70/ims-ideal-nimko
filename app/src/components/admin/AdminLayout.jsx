@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAdmin } from '../../context/AdminContext';
+import NotificationDropdown from '../NotificationDropdown';
 
 export default function AdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -198,20 +199,47 @@ export default function AdminLayout({ children }) {
 
       {/* Main content */}
       <div className="md:pl-64 flex flex-col flex-1">
-        {/* Mobile sidebar button */}
-        <div className="sticky top-0 z-10 md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3 bg-gray-100">
-          <button
-            type="button"
-            className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <span className="sr-only">Open sidebar</span>
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
+        {/* Top Header Bar */}
+        <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 h-16">
+            {/* Mobile sidebar button */}
+            <button
+              type="button"
+              className="md:hidden -ml-0.5 -mt-0.5 h-10 w-10 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <span className="sr-only">Open sidebar</span>
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
 
+            {/* Desktop: Spacer */}
+            <div className="hidden md:block flex-1"></div>
+
+            {/* Right side: Notifications and User Info */}
+            <div className="flex items-center space-x-4">
+              {/* Notification Bell - Only show for admin and superadmin */}
+              {(admin?.role === 'admin' || admin?.role === 'superadmin') && (
+                <NotificationDropdown />
+              )}
+              
+              {/* User Info */}
+              <div className="flex items-center space-x-3">
+                <div className="hidden sm:block text-right">
+                  <div className="text-sm font-medium text-gray-900">{admin?.name || admin?.username}</div>
+                  <div className="text-xs text-gray-500 capitalize">{admin?.role}</div>
+                </div>
+                <button
+                  onClick={logout}
+                  className="bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <main className="flex-1">
           {children}

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { CartProvider } from "./context/CartContext";
 import { AdminProvider, useAdmin } from "./context/AdminContext";
 import { NotificationProvider } from "./context/NotificationContext";
+import { ToastProvider } from "./context/ToastContext";
 import Navbar from "./components/Navbar";
 import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
@@ -67,11 +68,12 @@ function RoleBasedRedirect() {
 
 export default function App() {
   return (
-    <CartProvider>
-      <AdminProvider>
-        <NotificationProvider>
-          <BrowserRouter>
-          <ErrorBoundary>
+    <ToastProvider>
+      <CartProvider>
+        <AdminProvider>
+          <NotificationProvider>
+            <BrowserRouter>
+            <ErrorBoundary>
             <Routes>
               {/* Admin Routes - Must come first to avoid wildcard conflicts */}
               <Route path="/admin/login" element={<AdminLogin />} />
@@ -239,5 +241,6 @@ export default function App() {
         </NotificationProvider>
       </AdminProvider>
     </CartProvider>
+    </ToastProvider>
   );
 }

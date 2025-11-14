@@ -116,7 +116,20 @@ NotificationSchema.methods.markAsRead = function(userId) {
 
 // Method to check if read by a specific user
 NotificationSchema.methods.isReadBy = function(userId) {
-  return this.readBy.some(read => read.user.toString() === userId.toString());
+  if (!this.readBy || !Array.isArray(this.readBy)) {
+    return false;
+  }
+  if (!userId) {
+    return false;
+  }
+  const userIdStr = userId.toString ? userId.toString() : String(userId);
+  return this.readBy.some(read => {
+    if (!read || !read.user) {
+      return false;
+    }
+    const readUserIdStr = read.user.toString ? read.user.toString() : String(read.user);
+    return readUserIdStr === userIdStr;
+  });
 };
 
 const Notification = mongoose.model('Notification', NotificationSchema);

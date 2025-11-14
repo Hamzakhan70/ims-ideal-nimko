@@ -1,61 +1,92 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { api } from '../../utils/api';
+import DataTable from '../../components/common/DataTable';
+import Pagination from '../../components/common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 export default function OrderManagement() {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    status: '',
-    search: '',
-    startDate: '',
-    endDate: ''
-  });
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pages: 1,
-    total: 0
-  });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
+
+  // Fetch function for pagination hook
+  const fetchOrders = useCallback(async (params) => {
+    const token = localStorage.getItem('adminToken');
+    const queryParams = new URLSearchParams({
+      page: params.page,
+      limit: params.limit,
+      ...(params.status && { status: params.status }),
+      ...(params.search && { search: params.search }),
+      ...(params.startDate && { startDate: params.startDate }),
+      ...(params.endDate && { endDate: params.endDate }),
+    });
+
+    const response = await axios.get(`${api.orders.getAll()}?${queryParams}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response;
+  }, []);
+
+  // Use pagination hook
+  const {
+    data: orders,
+    loading,
+    pagination,
+    handlePageChange,
+    handlePageSizeChange,
+    handleFilterChange,
+    refresh: refreshOrders,
+  } = usePagination(fetchOrders, { status: '', search: '', startDate: '', endDate: '' }, 10);
+
+  // Update filters when they change (with debounce for search)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleFilterChange('search', searchFilter);
+    }, searchFilter ? 500 : 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchFilter, handleFilterChange]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [filters, pagination.current]);
+    handleFilterChange('status', statusFilter);
+  }, [statusFilter, handleFilterChange]);
 
-  const fetchOrders = async () => {
-    try {
-      const params = new URLSearchParams({
-        page: pagination.current,
-        limit: 10,
-        ...filters
-      });
-      
-      const response = await axios.get(`http://localhost:5000/api/orders?${params}`);
-      setOrders(response.data.orders);
-      setPagination(response.data.pagination);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    handleFilterChange('startDate', startDateFilter);
+  }, [startDateFilter, handleFilterChange]);
+
+  useEffect(() => {
+    handleFilterChange('endDate', endDateFilter);
+  }, [endDateFilter, handleFilterChange]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     try {
-      await axios.put(`http://localhost:5000/api/orders/${orderId}/status`, { status: newStatus });
-      fetchOrders();
+      const token = localStorage.getItem('adminToken');
+      await axios.put(api.orders.updateStatus(orderId), { status: newStatus }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      refreshOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
+      alert('Error updating order status: ' + (error.response?.data?.error || error.message));
     }
   };
 
   const handleDeleteOrder = async (orderId) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
       try {
-        await axios.delete(`http://localhost:5000/api/orders/${orderId}`);
-        fetchOrders();
+        const token = localStorage.getItem('adminToken');
+        await axios.delete(api.orders.delete(orderId), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        refreshOrders();
       } catch (error) {
         console.error('Error deleting order:', error);
+        alert('Error deleting order: ' + (error.response?.data?.error || error.message));
       }
     }
   };
@@ -78,18 +109,84 @@ export default function OrderManagement() {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-    setPagination(prev => ({ ...prev, current: 1 }));
-  };
+  // Define table columns
+  const columns = [
+    {
+      key: 'orderId',
+      header: 'Order ID',
+      render: (order) => (
+        <span className="text-sm font-medium text-gray-900">#{order._id.slice(-8)}</span>
+      ),
+    },
+    {
+      key: 'customer',
+      header: 'Customer',
+      render: (order) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900">{order.customerName}</div>
+          <div className="text-sm text-gray-500">{order.phone}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'items',
+      header: 'Items',
+      render: (order) => (
+        <span className="text-sm text-gray-900">{order.items?.length || 0} item(s)</span>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      render: (order) => (
+        <span className="text-sm text-gray-900">{formatCurrency(order.totalAmount)}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (order) => (
+        <select
+          value={order.status}
+          onChange={(e) => handleStatusUpdate(order._id, e.target.value)}
+          className={`text-xs font-semibold px-2 py-1 rounded-full border-0 ${getStatusColor(order.status)}`}
+        >
+          <option value="Pending">Pending</option>
+          <option value="Processing">Processing</option>
+          <option value="Shipped">Shipped</option>
+          <option value="Delivered">Delivered</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      render: (order) => (
+        <span className="text-sm text-gray-500">{new Date(order.orderDate).toLocaleDateString()}</span>
+      ),
+    },
+  ];
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="text-xl">Loading orders...</div>
-      </div>
-    );
-  }
+  const rowActions = (order) => (
+    <div className="flex space-x-2">
+      <button
+        onClick={() => {
+          setSelectedOrder(order);
+          setShowModal(true);
+        }}
+        className="text-blue-600 hover:text-blue-900"
+      >
+        View
+      </button>
+      <button
+        onClick={() => handleDeleteOrder(order._id)}
+        className="text-red-600 hover:text-red-900"
+      >
+        Delete
+      </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -112,16 +209,16 @@ export default function OrderManagement() {
               <input
                 type="text"
                 placeholder="Customer name, phone..."
-                value={filters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               >
                 <option value="">All Status</option>
@@ -136,8 +233,8 @@ export default function OrderManagement() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
               <input
                 type="date"
-                value={filters.startDate}
-                onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                value={startDateFilter}
+                onChange={(e) => setStartDateFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
@@ -145,150 +242,49 @@ export default function OrderManagement() {
               <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
               <input
                 type="date"
-                value={filters.endDate}
-                onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                value={endDateFilter}
+                onChange={(e) => setEndDateFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
               />
             </div>
           </div>
+          <div className="mt-4">
+            <button
+              onClick={() => {
+                setSearchFilter('');
+                setStatusFilter('');
+                setStartDateFilter('');
+                setEndDateFilter('');
+                handleFilterChange('search', '');
+                handleFilterChange('status', '');
+                handleFilterChange('startDate', '');
+                handleFilterChange('endDate', '');
+              }}
+              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
 
         {/* Orders Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Items
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {orders.map((order) => (
-                  <tr key={order._id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      #{order._id.slice(-8)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{order.customerName}</div>
-                        <div className="text-sm text-gray-500">{order.phone}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.items.length} item(s)
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatCurrency(order.totalAmount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <select
-                        value={order.status}
-                        onChange={(e) => handleStatusUpdate(order._id, e.target.value)}
-                        className={`text-xs font-semibold px-2 py-1 rounded-full border-0 ${getStatusColor(order.status)}`}
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Processing">Processing</option>
-                        <option value="Shipped">Shipped</option>
-                        <option value="Delivered">Delivered</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(order.orderDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setShowModal(true);
-                          }}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => handleDeleteOrder(order._id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <DataTable
+          columns={columns}
+          data={orders}
+          loading={loading}
+          rowActions={rowActions}
+          emptyMessage="No orders found."
+        />
 
-          {/* Pagination */}
-          {pagination.pages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setPagination(prev => ({ ...prev, current: Math.max(1, prev.current - 1) }))}
-                  disabled={pagination.current === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setPagination(prev => ({ ...prev, current: Math.min(prev.pages, prev.current + 1) }))}
-                  disabled={pagination.current === pagination.pages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing page <span className="font-medium">{pagination.current}</span> of{' '}
-                    <span className="font-medium">{pagination.pages}</span>
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    <button
-                      onClick={() => setPagination(prev => ({ ...prev, current: Math.max(1, prev.current - 1) }))}
-                      disabled={pagination.current === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setPagination(prev => ({ ...prev, current: Math.min(prev.pages, prev.current + 1) }))}
-                      disabled={pagination.current === pagination.pages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </nav>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Pagination */}
+        <Pagination
+          currentPage={pagination.current}
+          totalPages={pagination.pages}
+          totalItems={pagination.total}
+          pageSize={pagination.pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </div>
 
       {/* Order Details Modal */}
