@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { api } from '../../utils/api';
+import { useToast } from '../../context/ToastContext';
+import Pagination from '../../components/common/Pagination';
 
 export default function SalesmanOrderPlacement() {
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [products, setProducts] = useState([]);
   const [shopkeepers, setShopkeepers] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -20,6 +23,8 @@ export default function SalesmanOrderPlacement() {
   });
   const [lastOrder, setLastOrder] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
 
   useEffect(() => {
     fetchData();
@@ -36,9 +41,10 @@ export default function SalesmanOrderPlacement() {
       
       if (!token) {
         console.error('No authentication token found');
-        alert('Authentication required. Please login again.');
-        // Redirect to login or show login form
-        window.location.href = '/admin/login';
+        showError('Authentication required. Please login again.');
+        setTimeout(() => {
+          window.location.href = '/admin/login';
+        }, 1500);
         setLoading(false);
         return;
       }
@@ -49,14 +55,21 @@ export default function SalesmanOrderPlacement() {
       
       if (!userId) {
         console.error('No user ID found');
-        alert('User ID not found. Please login again.');
-        window.location.href = '/admin/login';
+        showError('User ID not found. Please login again.');
+        setTimeout(() => {
+          window.location.href = '/admin/login';
+        }, 1500);
         setLoading(false);
         return;
       }
       
       const [productsResponse, shopkeepersResponse, categoriesResponse] = await Promise.all([
-        axios.get(api.products.getAll()),
+        axios.get(api.products.getAll(), {
+          params: {
+            limit: 1000, // Get all products (or a very high number)
+            page: 1
+          }
+        }),
         axios.get(api.assignments.getShopkeepersBySalesman(userId), {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -65,7 +78,9 @@ export default function SalesmanOrderPlacement() {
         axios.get(api.categories.getAll())
       ]);
       
-      setProducts(productsResponse.data.products || productsResponse.data || []);
+      // Handle paginated response
+      const productsData = productsResponse.data.products || productsResponse.data || [];
+      setProducts(Array.isArray(productsData) ? productsData : []);
       setShopkeepers(shopkeepersResponse.data.shopkeepers || []);
       // categories endpoint returns { success, categories: [ { name, ... } ] } or array
       const rawCategories = categoriesResponse?.data?.categories || categoriesResponse?.data || [];
@@ -78,8 +93,14 @@ export default function SalesmanOrderPlacement() {
       
       // Always try to fetch products first
       try {
-        const productsResponse = await axios.get(api.products.getAll());
-        setProducts(productsResponse.data.products || productsResponse.data || []);
+        const productsResponse = await axios.get(api.products.getAll(), {
+          params: {
+            limit: 1000, // Get all products (or a very high number)
+            page: 1
+          }
+        });
+        const productsData = productsResponse.data.products || productsResponse.data || [];
+        setProducts(Array.isArray(productsData) ? productsData : []);
         console.log('Products loaded successfully');
       } catch (productError) {
         console.error('Error loading products:', productError);
@@ -121,7 +142,7 @@ export default function SalesmanOrderPlacement() {
   const addToCart = (product) => {
     // Check if product is out of stock
     if (product.stock <= 0) {
-      alert('This product is out of stock!');
+      showError('This product is out of stock!');
       return;
     }
 
@@ -130,7 +151,7 @@ export default function SalesmanOrderPlacement() {
     if (existingItem) {
       // Check if adding one more would exceed stock
       if (existingItem.quantity >= product.stock) {
-        alert(`Cannot add more items. Only ${product.stock} units available in stock.`);
+        showWarning(`Cannot add more items. Only ${product.stock} units available in stock.`);
         return;
       }
       setCart(cart.map(item =>
@@ -162,7 +183,7 @@ export default function SalesmanOrderPlacement() {
       if (product && cartItem) {
         // Check if quantity exceeds available stock
         if (quantity > product.stock) {
-          alert(`Cannot set quantity to ${quantity}. Only ${product.stock} units available in stock.`);
+          showWarning(`Cannot set quantity to ${quantity}. Only ${product.stock} units available in stock.`);
           return;
         }
       }
@@ -237,11 +258,11 @@ export default function SalesmanOrderPlacement() {
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
     if (cart.length === 0) {
-      alert('Please add items to your cart');
+      showWarning('Please add items to your cart');
       return;
     }
     if (!selectedShopkeeper) {
-      alert('Please select a shopkeeper');
+      showWarning('Please select a shopkeeper');
       return;
     }
 
@@ -283,7 +304,7 @@ export default function SalesmanOrderPlacement() {
         console.log('Product stock updated successfully');
       } catch (stockError) {
         console.error('Error updating product stock:', stockError);
-        alert('Order created but failed to update product stock. Please check inventory manually.');
+        showWarning('Order created but failed to update product stock. Please check inventory manually.');
       }
       
       console.log('Order created response:', response.data.order);
@@ -295,16 +316,13 @@ export default function SalesmanOrderPlacement() {
       const paymentStatus = response.data.order.paymentStatus;
       const orderPendingAmount = response.data.order.pendingAmount || 0;
       
-      let paymentMessage = 'Order placed successfully!\n';
       if (paymentStatus === 'paid') {
-        paymentMessage += '✅ Full payment received.';
+        showSuccess('Order placed successfully! Full payment received.');
       } else if (paymentStatus === 'partial') {
-        paymentMessage += `💰 Partial payment received.\nOrder pending amount: PKR${orderPendingAmount.toFixed(2)}`;
+        showInfo(`Order placed successfully! Partial payment received. Pending amount: PKR${orderPendingAmount.toFixed(2)}`);
       } else {
-        paymentMessage += `⏳ Payment pending.\nOrder pending amount: PKR${orderPendingAmount.toFixed(2)}`;
+        showInfo(`Order placed successfully! Payment pending. Pending amount: PKR${orderPendingAmount.toFixed(2)}`);
       }
-      
-      alert(paymentMessage);
       
       // Refresh products to get updated stock levels
       await fetchData();
@@ -320,18 +338,31 @@ export default function SalesmanOrderPlacement() {
       });
     } catch (error) {
       console.error('Error placing order:', error);
-      alert('Error placing order: ' + (error.response?.data?.error || 'Unknown error'));
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+      showError(`Error placing order: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = !selectedCategory || product.category === selectedCategory;
-    return matchesSearch && matchesCategory && product.stock > 0;
-  });
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => {
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = !selectedCategory || product.category === selectedCategory;
+      return matchesSearch && matchesCategory && product.stock > 0;
+    });
+  }, [products, searchTerm, selectedCategory]);
+
+  // Pagination for products
+  const totalPages = Math.ceil(filteredProducts.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
 
   // categories now comes from API via state
 
@@ -704,8 +735,8 @@ Ideal Nimko Ltd.`;
             </div>
 
             {/* Products Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredProducts.map((product) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+              {paginatedProducts.map((product) => {
                 const isLowStock = product.stock < 5;
                 const isOutOfStock = product.stock <= 0;
                 
@@ -780,11 +811,36 @@ Ideal Nimko Ltd.`;
                 );
               })}
             </div>
+            
+            {/* Pagination for Products */}
+            {filteredProducts.length > 0 && (
+              <div className="mt-4 sm:mt-6">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={filteredProducts.length}
+                  pageSize={pageSize}
+                  pageSizeOptions={[12, 24, 48, 96]}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+            )}
+            
+            {filteredProducts.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <p className="text-lg">No products found</p>
+                <p className="text-sm mt-2">Try adjusting your search or category filter</p>
+              </div>
+            )}
           </div>
 
           {/* Cart Section */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow p-6 sticky top-4">
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6 sticky top-4">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Order Cart</h2>
               
               {cart.length === 0 ? (

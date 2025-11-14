@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { api } from '../../utils/api';
+import { useToast } from '../../context/ToastContext';
+import Pagination from '../../components/common/Pagination';
 
 export default function RecoveryManagement() {
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [recoveries, setRecoveries] = useState([]);
   const [shopkeepers, setShopkeepers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -13,6 +16,8 @@ export default function RecoveryManagement() {
   const [stats, setStats] = useState(null);
   const [lastRecovery, setLastRecovery] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [formData, setFormData] = useState({
     shopkeeperId: '',
     recoveryType: 'payment_only',
@@ -61,7 +66,8 @@ export default function RecoveryManagement() {
       setProducts(productsResponse.data.products || productsResponse.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
-      alert('Error loading data: ' + (error.response?.data?.error || error.message));
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to load data';
+      showError(`Error loading data: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -76,6 +82,8 @@ export default function RecoveryManagement() {
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to load statistics';
+      showError(`Error loading statistics: ${errorMessage}`);
     }
   };
 
@@ -89,7 +97,7 @@ export default function RecoveryManagement() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      alert('Recovery recorded successfully!');
+      showSuccess('Recovery recorded successfully!');
       setLastRecovery(response.data.recovery);
       setShowForm(false);
       setShowReceipt(true);
@@ -111,7 +119,8 @@ export default function RecoveryManagement() {
       fetchData();
     } catch (error) {
       console.error('Error creating recovery:', error);
-      alert('Error creating recovery: ' + (error.response?.data?.error || error.message));
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to create recovery';
+      showError(`Error creating recovery: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
@@ -119,18 +128,18 @@ export default function RecoveryManagement() {
 
   const addItem = () => {
     if (!newItem.product || newItem.quantity <= 0 || newItem.unitPrice < 0) {
-      alert('Please fill all item fields correctly');
+      showWarning('Please fill all item fields correctly');
       return;
     }
 
     const product = products.find(p => p._id === newItem.product);
     if (!product) {
-      alert('Product not found');
+      showError('Product not found');
       return;
     }
 
     if (product.stock < newItem.quantity) {
-      alert(`Insufficient stock. Available: ${product.stock}`);
+      showWarning(`Insufficient stock. Available: ${product.stock}`);
       return;
     }
 
@@ -231,6 +240,12 @@ export default function RecoveryManagement() {
   const getSelectedShopkeeper = () => {
     return shopkeepers.find(s => s._id === formData.shopkeeperId);
   };
+
+  // Pagination for recoveries
+  const totalPages = Math.ceil(recoveries.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedRecoveries = recoveries.slice(startIndex, endIndex);
 
   if (loading) {
     return (
@@ -579,7 +594,7 @@ export default function RecoveryManagement() {
           <div className="overflow-x-auto">
             {/* Mobile Card View */}
             <div className="block sm:hidden">
-              {recoveries.map((recovery) => (
+              {paginatedRecoveries.map((recovery) => (
                 <div key={recovery._id} className="border-b border-gray-200 p-3">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
@@ -618,37 +633,44 @@ export default function RecoveryManagement() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Shopkeeper
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Type
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Payment Method
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {recoveries.map((recovery) => (
+                  {paginatedRecoveries.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                        No recoveries found
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedRecoveries.map((recovery) => (
                     <tr key={recovery._id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {new Date(recovery.recoveryDate).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{recovery.shopkeeper?.name}</div>
-                        <div className="text-sm text-gray-500">{recovery.shopkeeper?.email}</div>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">{recovery.shopkeeper?.name || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{recovery.shopkeeper?.email || ''}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           recovery.recoveryType === 'payment_only' 
                             ? 'bg-blue-100 text-blue-800' 
@@ -657,13 +679,13 @@ export default function RecoveryManagement() {
                           {recovery.recoveryType === 'payment_only' ? 'Payment Only' : 'With Items'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        PKR {recovery.amountCollected?.toFixed(2)}
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        PKR {recovery.amountCollected?.toFixed(2) || '0.00'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {recovery.paymentMethod}
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {recovery.paymentMethod || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           recovery.status === 'completed' 
                             ? 'bg-green-100 text-green-800' 
@@ -671,14 +693,32 @@ export default function RecoveryManagement() {
                             ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {recovery.status}
+                          {recovery.status || 'N/A'}
                         </span>
                       </td>
                     </tr>
-                  ))}
+                  )))}
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+        
+        {/* Pagination */}
+        {recoveries.length > 0 && (
+          <div className="mt-4 px-3 sm:px-6 py-3 sm:py-4">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={recoveries.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+            />
           </div>
         )}
       </div>
