@@ -24,6 +24,7 @@ export default function ProductManagement() {
         description: '',
         category: '',
         price: '',
+        packets: '',
         imageURL: '',
         stock: '',
         featured: false,
@@ -139,6 +140,13 @@ export default function ProductManagement() {
             ...formData
         };
 
+        // Normalize packets value
+        if (submitData.packets === '') {
+            delete submitData.packets;
+        } else {
+            submitData.packets = Number(submitData.packets);
+        }
+
         // If no imageURL but we have uploaded images, use the first uploaded image as main image
         // Cloudinary returns full URLs, so use directly if absolute, otherwise prepend base URL
         if (! submitData.imageURL && submitData.additionalImages.length > 0) {
@@ -179,6 +187,7 @@ export default function ProductManagement() {
             description: product.description,
             category: product.category,
             price: product.price,
+            packets: product.packets || '',
             imageURL: product.imageURL,
             stock: product.stock,
             featured: product.featured,
@@ -210,6 +219,7 @@ export default function ProductManagement() {
             description: '',
             category: '',
             price: '',
+            packets: '',
             imageURL: '',
             stock: '',
             featured: false,
@@ -493,9 +503,17 @@ export default function ProductManagement() {
                                         <span className="text-2xl font-bold text-yellow-600">PKR {
                                             product.price
                                         }</span>
-                                        <span className="text-sm text-gray-500">Stock: {
-                                            product.stock
-                                        }</span>
+                                        <div className="text-sm text-gray-500 text-right">
+                                            <div>Stock: {
+                                                product.stock
+                                            }</div>
+                                            {
+                                            product.packets ? (
+                                                <div>Packets/bundle: {
+                                                    product.packets
+                                                }</div>
+                                            ) : null
+                                        } </div>
                                     </div>
                                     <div className="flex space-x-2">
                                         <button onClick={
@@ -644,7 +662,7 @@ export default function ProductManagement() {
                                     } </select>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Price</label>
                                         <input type="number" required min="0" step="0.01"
@@ -669,6 +687,24 @@ export default function ProductManagement() {
                                                 (e) => setFormData({
                                                     ...formData,
                                                     stock: e.target.value
+                                                })
+                                            }
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Packets per bundle
+                                            <span className="text-gray-500 text-sm">
+                                                (Optional)</span>
+                                        </label>
+                                        <input type="number" min="1" placeholder="e.g., 12"
+                                            value={
+                                                formData.packets
+                                            }
+                                            onChange={
+                                                (e) => setFormData({
+                                                    ...formData,
+                                                    packets: e.target.value
                                                 })
                                             }
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"/>
