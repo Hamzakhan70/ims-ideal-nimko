@@ -9,11 +9,13 @@ export default function SalesmanOrderPlacement() {
     const [products, setProducts] = useState([]);
     const [shopkeepers, setShopkeepers] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [cities, setCities] = useState([]);
     const [cart, setCart] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
+    const [selectedCity, setSelectedCity] = useState('');
     const [selectedShopkeeper, setSelectedShopkeeper] = useState('');
     const [selectedShopkeeperDetails, setSelectedShopkeeperDetails] = useState(null);
     const [orderForm, setOrderForm] = useState({notes: '', paymentMethod: 'cash', amountPaid: ''});
@@ -59,7 +61,7 @@ export default function SalesmanOrderPlacement() {
                 return;
             }
 
-            const [productsResponse, shopkeepersResponse, categoriesResponse] = await Promise.all([
+            const [productsResponse, shopkeepersResponse, categoriesResponse, citiesResponse] = await Promise.all([
                 axios.get(api.products.getAll(), {
                     params: {
                         limit: 1000, // Get all products (or a very high number)
@@ -71,17 +73,27 @@ export default function SalesmanOrderPlacement() {
                         'Authorization': `Bearer ${token}`
                     }
                 }),
-                axios.get(api.categories.getAll())
+                axios.get(api.categories.getAll()),
+                axios.get(api.cities.getAll(), {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
             ]);
 
             // Handle paginated response
             const productsData = productsResponse.data.products || productsResponse.data || [];
             setProducts(Array.isArray(productsData) ? productsData : []);
-            setShopkeepers(shopkeepersResponse.data.shopkeepers || []);
+            const shopkeepersData = shopkeepersResponse.data.shopkeepers || shopkeepersResponse.data || [];
+            console.log('Fetched shopkeepers:', shopkeepersData);
+            setShopkeepers(Array.isArray(shopkeepersData) ? shopkeepersData : []);
             // categories endpoint returns { success, categories: [ { name, ... } ] } or array
             const rawCategories = categoriesResponse ?. data ?. categories || categoriesResponse ?. data || [];
             const normalizedCategories = Array.isArray(rawCategories) ? rawCategories.map(c => (typeof c === 'string' ? c : c ?. name)).filter(Boolean) : [];
             setCategories(normalizedCategories);
+            // cities endpoint returns { cities: [...] }
+            const citiesData = citiesResponse ?. data ?. cities || [];
+            setCities(Array.isArray(citiesData) ? citiesData : []);
         } catch (error) {
             console.error('Error fetching data:', error);
 
@@ -109,6 +121,20 @@ export default function SalesmanOrderPlacement() {
             } catch (categoriesError) {
                 console.error('Error loading categories:', categoriesError);
             }
+            // Try to fetch cities even if others fail
+            try {
+                const token = localStorage.getItem('adminToken');
+                const citiesResponse = await axios.get(api.cities.getAll(), {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const citiesData = citiesResponse ?. data ?. cities || [];
+                setCities(Array.isArray(citiesData) ? citiesData : []);
+                console.log('Cities loaded successfully');
+            } catch (citiesError) {
+                console.error('Error loading cities:', citiesError);
+            }
 
             // If assignment API fails, try to fetch all shopkeepers as fallback
             try {
@@ -118,8 +144,9 @@ export default function SalesmanOrderPlacement() {
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                setShopkeepers(fallbackResponse.data.shopkeepers || []);
-                console.log('Fallback successful, loaded all shopkeepers');
+                const fallbackShopkeepers = fallbackResponse.data.shopkeepers || [];
+                console.log('Fallback successful, loaded shopkeepers:', fallbackShopkeepers);
+                setShopkeepers(Array.isArray(fallbackShopkeepers) ? fallbackShopkeepers : []);
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
                 console.log('No shopkeepers available - this might be expected if no assignments exist');
@@ -236,6 +263,80 @@ export default function SalesmanOrderPlacement() {
         }, 0);
     };
 
+    const handleCityChange = async (cityId) => {
+        setSelectedCity(cityId);
+        // Reset shopkeeper selection when city changes
+        setSelectedShopkeeper('');
+        setSelectedShopkeeperDetails(null);
+
+        // Fetch shopkeepers filtered by city
+        await fetchShopkeepersByCity(cityId);
+    };
+
+    const fetchShopkeepersByCity = async (cityId) => {
+        try {
+            const token = localStorage.getItem('adminToken');
+            if (! token) 
+                return;
+            
+
+
+            const userId = localStorage.getItem('userId') || localStorage.getItem('adminId');
+            if (! userId) 
+                return;
+            
+
+
+            // Build query params
+            const params = {};
+            if (cityId) {
+                params.city = cityId;
+            }
+
+            const queryString = new URLSearchParams(params).toString();
+            const url = `${
+                api.assignments.getShopkeepersBySalesman(userId)
+            }${
+                queryString ? `?${queryString}` : ''
+            }`;
+
+            console.log('Fetching shopkeepers with city filter:', cityId);
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const shopkeepersData = response.data.shopkeepers || response.data || [];
+            console.log('Fetched shopkeepers:', shopkeepersData);
+            setShopkeepers(Array.isArray(shopkeepersData) ? shopkeepersData : []);
+        } catch (error) {
+            console.error('Error fetching shopkeepers by city:', error);
+            // Fallback to shopkeepers API if assignment API fails
+            try {
+                const token = localStorage.getItem('adminToken');
+                const params = cityId ? {
+                    city: cityId
+                } : {};
+                const queryString = new URLSearchParams(params).toString();
+                const fallbackResponse = await axios.get(`${
+                    api.shopkeepers.getAll()
+                }${
+                    queryString ? `?${queryString}` : ''
+                }`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const fallbackShopkeepers = fallbackResponse.data.shopkeepers || [];
+                console.log('Fallback shopkeepers fetched:', fallbackShopkeepers);
+                setShopkeepers(Array.isArray(fallbackShopkeepers) ? fallbackShopkeepers : []);
+            } catch (fallbackError) {
+                console.error('Fallback also failed:', fallbackError);
+            }
+        }
+    };
+
     const handleShopkeeperChange = (shopkeeperId) => {
         setSelectedShopkeeper(shopkeeperId);
         if (!shopkeeperId) {
@@ -243,7 +344,7 @@ export default function SalesmanOrderPlacement() {
             return;
         }
 
-        const shopkeeper = shopkeepers.find(s => s._id === shopkeeperId);
+        const shopkeeper = filteredShopkeepers.find(s => s._id === shopkeeperId);
         setSelectedShopkeeperDetails(shopkeeper || null);
     };
 
@@ -359,6 +460,9 @@ export default function SalesmanOrderPlacement() {
             setSubmitting(false);
         }
     };
+
+    // Shopkeepers are already filtered by city via API, so use them directly
+    const filteredShopkeepers = shopkeepers;
 
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
@@ -811,32 +915,81 @@ Ideal Nimko Ltd.`;
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Products Section */}
                     <div className="lg:col-span-2">
-                        {/* Shopkeeper Selection */}
+                        {/* City and Shopkeeper Selection */}
                         <div className="bg-white p-4 rounded-lg shadow mb-6">
-                            <h2 className="text-lg font-semibold text-gray-700 mb-4">Select Shopkeeper</h2>
-                            <select value={selectedShopkeeper}
-                                onChange={
-                                    (e) => handleShopkeeperChange(e.target.value)
-                                }
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                                required>
-                                <option value="">Choose a shopkeeper...</option>
-                                {
-                                shopkeepers.map(shopkeeper => (
-                                    <option key={
-                                            shopkeeper._id
+                            <h2 className="text-lg font-semibold text-gray-700 mb-4">Select City & Shopkeeper</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                                    <select value={selectedCity}
+                                        onChange={
+                                            (e) => handleCityChange(e.target.value)
                                         }
-                                        value={
-                                            shopkeeper._id
-                                        }
-                                        className='text-sm'>
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                                        <option value="">All Cities</option>
                                         {
-                                        shopkeeper.name
-                                    }-{
-                                        shopkeeper.email
-                                    } </option>
-                                ))
-                            } </select>
+                                        cities.map(city => (
+                                            <option key={
+                                                    city._id
+                                                }
+                                                value={
+                                                    city._id
+                                            }>
+                                                {
+                                                city.name
+                                            } </option>
+                                        ))
+                                    } </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Shopkeeper</label>
+                                    <select value={selectedShopkeeper}
+                                        onChange={
+                                            (e) => handleShopkeeperChange(e.target.value)
+                                        }
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                        required>
+                                        <option value="">
+                                            {
+                                            selectedCity ? (filteredShopkeepers.length > 0 ? 'Choose a shopkeeper...' : 'No shopkeepers in this city') : 'All shopkeepers (or select a city to filter)...'
+                                        } </option>
+                                        {
+                                        filteredShopkeepers.map(shopkeeper => (
+                                            <option key={
+                                                    shopkeeper._id
+                                                }
+                                                value={
+                                                    shopkeeper._id
+                                                }
+                                                className='text-sm'>
+                                                {
+                                                shopkeeper.name
+                                            }
+                                                - {
+                                                shopkeeper.email
+                                            }
+                                                {
+                                                shopkeeper.city && typeof shopkeeper.city === 'object' && shopkeeper.city.name && ` (${
+                                                    shopkeeper.city.name
+                                                })`
+                                            } </option>
+                                        ))
+                                    } </select>
+                                    {
+                                    filteredShopkeepers.length === 0 && selectedCity && (
+                                        <p className="text-xs text-red-500 mt-1">
+                                            No shopkeepers found in this city. Try selecting a different city or contact admin.
+                                        </p>
+                                    )
+                                }
+                                    {
+                                    shopkeepers.length === 0 && (
+                                        <p className="text-xs text-yellow-600 mt-1">
+                                            No shopkeepers available. Please contact admin to assign shopkeepers.
+                                        </p>
+                                    )
+                                } </div>
+                            </div>
                             {
                             selectedShopkeeperDetails ?. pendingAmount && selectedShopkeeperDetails.pendingAmount > 0 && (
                                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
