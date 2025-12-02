@@ -2,6 +2,7 @@
 import express from "express";
 import ShopSalesmanAssignment from "../models/ShopSalesmanAssignment.js";
 import User from "../models/User.js";
+import City from "../models/City.js";
 import {authenticateToken} from "../middleware/auth.js";
 const router = express.Router();
 
@@ -17,7 +18,8 @@ router.get("/", authenticateToken, async (req, res) => {
             limit = 20,
             search = '',
             salesmanId = '',
-            shopkeeperId = ''
+            shopkeeperId = '',
+            city = ''
         } = req.query;
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -35,7 +37,14 @@ router.get("/", authenticateToken, async (req, res) => {
         }
 
         // If search term provided, we'll filter after populating
-        let assignmentsQuery = ShopSalesmanAssignment.find(query).populate('salesmanId', 'name email role').populate('shopkeeperId', 'name email role').populate('assignedBy', 'name email').sort({assignedAt: -1});
+        let assignmentsQuery = ShopSalesmanAssignment.find(query).populate('salesmanId', 'name email role').populate({
+            path: 'shopkeeperId',
+            select: 'name email role city',
+            populate: {
+                path: 'city',
+                select: 'name'
+            }
+        }).populate('assignedBy', 'name email').sort({assignedAt: -1});
 
         let assignments = await assignmentsQuery;
 
@@ -48,6 +57,14 @@ router.get("/", authenticateToken, async (req, res) => {
                 const shopkeeperName = assignment.shopkeeperId ?. name ?. toLowerCase() || '';
                 const shopkeeperEmail = assignment.shopkeeperId ?. email ?. toLowerCase() || '';
                 return salesmanName.includes(searchLower) || salesmanEmail.includes(searchLower) || shopkeeperName.includes(searchLower) || shopkeeperEmail.includes(searchLower);
+            });
+        }
+
+        // Apply city filter after populating
+        if (city) {
+            assignments = assignments.filter(assignment => {
+                const shopkeeperCityId = assignment.shopkeeperId ?. city ?. _id || assignment.shopkeeperId ?. city;
+                return shopkeeperCityId ?. toString() === city.toString();
             });
         }
 
@@ -130,7 +147,7 @@ router.post("/", authenticateToken, async (req, res) => {
             return res.status(403).json({error: "Access denied. Super admin required."});
         }
 
-        const {salesmanId, shopkeeperId, notes} = req.body;
+        const {salesmanId, cityId, notes} = req.body;
 
         // Validate salesman exists and has salesman role
         const salesman = await User.findById(salesmanId);
@@ -138,29 +155,70 @@ router.post("/", authenticateToken, async (req, res) => {
             return res.status(400).json({error: "Invalid salesman ID or role."});
         }
 
-        // Validate shopkeeper exists and has shopkeeper role
-        const shopkeeper = await User.findById(shopkeeperId);
-        if (! shopkeeper || shopkeeper.role !== 'shopkeeper') {
-            return res.status(400).json({error: "Invalid shopkeeper ID or role."});
+        // Validate city exists
+        const city = await City.findById(cityId);
+        if (! city) {
+            return res.status(400).json({error: "Invalid city ID."});
         }
 
-        // Check if assignment already exists
-        const existingAssignment = await ShopSalesmanAssignment.findOne({salesmanId, shopkeeperId, isActive: true});
+        // Find all shopkeepers in this city
+        const shopkeepers = await User.find({
+            role: 'shopkeeper',
+            city: cityId
+        });
 
-        if (existingAssignment) {
-            return res.status(400).json({error: "Assignment already exists."});
+        if (shopkeepers.length === 0) {
+            return res.status(400).json({error: "No shopkeepers found in this city."});
         }
 
-        const assignment = new ShopSalesmanAssignment({salesmanId, shopkeeperId, assignedBy: req.user._id, notes});
+        // Create assignments for all shopkeepers in the city
+        const assignments = [];
+        const skipped = [];
+        
+        for (const shopkeeper of shopkeepers) {
+            // Check if assignment already exists
+            const existingAssignment = await ShopSalesmanAssignment.findOne({
+                salesmanId,
+                shopkeeperId: shopkeeper._id,
+                isActive: true
+            });
 
-        await assignment.save();
+            if (existingAssignment) {
+                skipped.push({
+                    shopkeeperId: shopkeeper._id,
+                    shopkeeperName: shopkeeper.name
+                });
+                continue;
+            }
 
-        // Populate the response
-        await assignment.populate('salesmanId', 'name email role');
-        await assignment.populate('shopkeeperId', 'name email role');
-        await assignment.populate('assignedBy', 'name email');
+            const assignment = new ShopSalesmanAssignment({
+                salesmanId,
+                shopkeeperId: shopkeeper._id,
+                assignedBy: req.user._id,
+                notes
+            });
 
-        res.status(201).json({success: true, message: "Assignment created successfully", assignment});
+            await assignment.save();
+            
+            // Populate the assignment
+            await assignment.populate('salesmanId', 'name email role');
+            await assignment.populate('shopkeeperId', 'name email role');
+            await assignment.populate('assignedBy', 'name email');
+            
+            assignments.push(assignment);
+        }
+
+        const message = assignments.length > 0 
+            ? `Successfully assigned ${assignments.length} shopkeeper(s) from ${city.name}.${skipped.length > 0 ? ` ${skipped.length} shopkeeper(s) were already assigned.` : ''}`
+            : `All shopkeepers in ${city.name} are already assigned to this salesman.`;
+
+        res.status(201).json({
+            success: true,
+            message,
+            assignments,
+            skipped,
+            city: city.name
+        });
     } catch (error) {
         res.status(400).json({error: error.message});
     }
@@ -236,7 +294,7 @@ router.get("/available/shopkeepers", authenticateToken, async (req, res) => {
             return res.status(403).json({error: "Access denied. Super admin required."});
         }
 
-        const shopkeepers = await User.find({role: 'shopkeeper'}).select('name email phone address').sort({name: 1});
+        const shopkeepers = await User.find({role: 'shopkeeper'}).select('name email phone address city').populate('city', 'name').sort({name: 1});
 
         res.json({success: true, shopkeepers});
     } catch (error) {

@@ -44,8 +44,6 @@ const corsOptions = {
         if (! origin) 
             return callback(null, true);
         
-
-
         const allowedOrigins = [
             process.env.CORS_ORIGIN || "http://localhost:5173",
             "https://ideal-nimko.netlify.app", // Your Netlify URL
@@ -54,7 +52,6 @@ const corsOptions = {
             "http://localhost:5173",
             "https://ideal-nimko-web.vercel.app" // <-- Added Vercel custom domain
         ];
-
         if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {

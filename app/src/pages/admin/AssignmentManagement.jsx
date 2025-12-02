@@ -7,12 +7,14 @@ import {usePagination} from '../../hooks/usePagination';
 export default function AssignmentManagement() {
     const [salesmen, setSalesmen] = useState([]);
     const [shopkeepers, setShopkeepers] = useState([]);
+    const [cities, setCities] = useState([]);
     const [submitting, setSubmitting] = useState(false);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({salesmanId: '', shopkeeperId: '', notes: ''});
+    const [formData, setFormData] = useState({salesmanId: '', cityId: '', notes: ''});
     const [searchTerm, setSearchTerm] = useState('');
     const [salesmanFilter, setSalesmanFilter] = useState('');
     const [shopkeeperFilter, setShopkeeperFilter] = useState('');
+    const [cityFilter, setCityFilter] = useState('');
 
     // Fetch function for pagination hook
     const fetchAssignments = useCallback(async (params) => {
@@ -28,6 +30,9 @@ export default function AssignmentManagement() {
             }),
             ...(params.shopkeeperId && {
                 shopkeeperId: params.shopkeeperId
+            }),
+            ...(params.city && {
+                city: params.city
             })
         });
 
@@ -53,11 +58,13 @@ export default function AssignmentManagement() {
     } = usePagination(fetchAssignments, {
         search: '',
         salesmanId: '',
-        shopkeeperId: ''
+        shopkeeperId: '',
+        city: ''
     }, 20);
 
     useEffect(() => {
         fetchDropdownData();
+        fetchCities();
     }, []);
 
     // Update filters when they change
@@ -77,12 +84,17 @@ export default function AssignmentManagement() {
         handleFilterChange('shopkeeperId', shopkeeperFilter);
     }, [shopkeeperFilter, handleFilterChange]);
 
+    useEffect(() => {
+        handleFilterChange('city', cityFilter);
+    }, [cityFilter, handleFilterChange]);
+
     const fetchDropdownData = async () => {
         try {
             const token = localStorage.getItem('adminToken');
             if (! token) 
                 return;
             
+
 
             const [salesmenResponse, shopkeepersResponse] = await Promise.all([
                 axios.get(api.assignments.getAvailableSalesmen(), {
@@ -104,6 +116,25 @@ export default function AssignmentManagement() {
         }
     };
 
+    const fetchCities = async () => {
+        try {
+            const token = localStorage.getItem('adminToken');
+            if (! token) 
+                return;
+            
+
+
+            const response = await axios.get(api.cities.getAll(), {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            setCities(response.data.cities || []);
+        } catch (error) {
+            console.error('Error fetching cities:', error);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
@@ -116,9 +147,10 @@ export default function AssignmentManagement() {
                 }
             });
 
-            alert('Assignment created successfully!');
+            const message = response.data.message || 'Assignment created successfully!';
+            alert(message);
             setShowForm(false);
-            setFormData({salesmanId: '', shopkeeperId: '', notes: ''});
+            setFormData({salesmanId: '', cityId: '', notes: ''});
             refreshAssignments();
         } catch (error) {
             console.error('Error creating assignment:', error);
@@ -178,7 +210,7 @@ export default function AssignmentManagement() {
             showForm && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                        <h2 className="text-xl font-semibold mb-4">Create New Assignment</h2>
+                        <h2 className="text-xl font-semibold mb-4">Assign City to Salesman</h2>
                         <form onSubmit={handleSubmit}
                             className="space-y-4">
                             <div>
@@ -217,36 +249,36 @@ export default function AssignmentManagement() {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Select Shopkeeper
+                                    Select City
                                 </label>
                                 <select value={
-                                        formData.shopkeeperId
+                                        formData.cityId
                                     }
                                     onChange={
                                         (e) => setFormData({
                                             ...formData,
-                                            shopkeeperId: e.target.value
+                                            cityId: e.target.value
                                         })
                                     }
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     required>
-                                    <option value="">Choose a shopkeeper...</option>
+                                    <option value="">Choose a city...</option>
                                     {
-                                    shopkeepers.map(shopkeeper => (
+                                    cities.map(city => (
                                         <option key={
-                                                shopkeeper._id
+                                                city._id
                                             }
                                             value={
-                                                shopkeeper._id
+                                                city._id
                                         }>
                                             {
-                                            shopkeeper.name
-                                        }
-                                            - {
-                                            shopkeeper.email
+                                            city.name
                                         } </option>
                                     ))
                                 } </select>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    All shopkeepers in this city will be assigned to the selected salesman.
+                                </p>
                             </div>
 
                             <div>
@@ -290,7 +322,7 @@ export default function AssignmentManagement() {
 
             {/* Filters */}
             <div className="bg-white p-4 rounded-lg shadow mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
                         <input type="text" placeholder="Search by name or email..."
@@ -346,6 +378,28 @@ export default function AssignmentManagement() {
                                 }
                                     - {
                                     shopkeeper.email
+                                } </option>
+                            ))
+                        } </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                        <select value={cityFilter}
+                            onChange={
+                                (e) => setCityFilter(e.target.value)
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                            <option value="">All Cities</option>
+                            {
+                            cities.map(city => (
+                                <option key={
+                                        city._id
+                                    }
+                                    value={
+                                        city._id
+                                }>
+                                    {
+                                    city.name
                                 } </option>
                             ))
                         } </select>
