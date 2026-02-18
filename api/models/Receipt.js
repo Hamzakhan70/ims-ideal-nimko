@@ -104,7 +104,6 @@ ReceiptSchema.pre('save', async function(next) {
 });
 
 // Index for better query performance
-ReceiptSchema.index({ receiptNumber: 1 });
 ReceiptSchema.index({ receiptType: 1, printedAt: -1 });
 ReceiptSchema.index({ shopkeeper: 1, salesman: 1 });
 

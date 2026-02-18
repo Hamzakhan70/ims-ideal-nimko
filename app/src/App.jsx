@@ -17,6 +17,8 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import ProductManagement from "./pages/admin/ProductManagement";
 import OrderManagement from "./pages/admin/OrderManagement";
 import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard";
+import ReceivedPaymentsDetails from "./pages/admin/ReceivedPaymentsDetails";
+import OutstandingBalancesDetails from "./pages/admin/OutstandingBalancesDetails";
 import SettingsPage from "./pages/admin/SettingsPage";
 import ShopkeeperDashboard from "./pages/shopkeeper/ShopkeeperDashboard";
 import SalesmanOrderManagement from "./pages/salesman/SalesmanOrderManagement";
@@ -106,6 +108,20 @@ export default function App() {
                 <ProtectedRoute>
                   <AdminLayout>
                     <AnalyticsDashboard />
+                  </AdminLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/analytics/received-details" element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <ReceivedPaymentsDetails />
+                  </AdminLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/analytics/outstanding-details" element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <OutstandingBalancesDetails />
                   </AdminLayout>
                 </ProtectedRoute>
               } />

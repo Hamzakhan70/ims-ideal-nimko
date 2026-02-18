@@ -72,7 +72,15 @@ export default function AdminDashboard() {
         status: order.status
       }));
 
-      setRecentOrders([...formattedWebsiteOrders, ...formattedShopkeeperOrders].slice(0, 5));
+      const sortedRecentOrders = [...formattedWebsiteOrders, ...formattedShopkeeperOrders]
+        .sort((a, b) => {
+          const dateA = new Date(a.orderDate || a.createdAt || 0).getTime();
+          const dateB = new Date(b.orderDate || b.createdAt || 0).getTime();
+          return dateB - dateA;
+        })
+        .slice(0, 5);
+
+      setRecentOrders(sortedRecentOrders);
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -82,10 +90,10 @@ export default function AdminDashboard() {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR'
-    }).format(amount);
+    return `PKR ${new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(amount || 0))}`;
   };
 
   const getStatusColor = (status) => {

@@ -135,7 +135,9 @@ export const api = {
   // Analytics
   analytics: {
     getDashboard: () => withApi('/analytics/dashboard'),
-    getSalesmanAnalytics: (salesmanId) => withApi(`/analytics/salesman/${salesmanId}`)
+    getSalesmanAnalytics: (salesmanId) => withApi(`/analytics/salesman/${salesmanId}`),
+    getReceivedPaymentsDetails: () => withApi('/analytics/payments/received-details'),
+    getOutstandingBalancesDetails: () => withApi('/analytics/payments/outstanding-details')
   },
 
   // Notifications

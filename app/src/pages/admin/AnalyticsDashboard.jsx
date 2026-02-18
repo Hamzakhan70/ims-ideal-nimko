@@ -1,8 +1,55 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { api } from '../../utils/api';
 
+const toInputDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getPresetDateRange = (period) => {
+  const today = new Date();
+  let start;
+
+  switch (period) {
+    case 'quarterly': {
+      const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
+      start = new Date(today.getFullYear(), quarterStartMonth, 1);
+      break;
+    }
+    case 'half-yearly': {
+      const halfStartMonth = today.getMonth() < 6 ? 0 : 6;
+      start = new Date(today.getFullYear(), halfStartMonth, 1);
+      break;
+    }
+    case 'annually':
+      start = new Date(today.getFullYear(), 0, 1);
+      break;
+    case 'monthly':
+    default:
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+      break;
+  }
+
+  return {
+    startDate: toInputDate(start),
+    endDate: toInputDate(today)
+  };
+};
+
+const reportTypeLabels = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  'half-yearly': 'Half-Yearly',
+  annually: 'Annually'
+};
+
 export default function AnalyticsDashboard() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalProfit: 0,
@@ -18,10 +65,11 @@ export default function AnalyticsDashboard() {
   const [salesmanPerformance, setSalesmanPerformance] = useState([]);
   const [shopkeeperPerformance, setShopkeeperPerformance] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
-  });
+  const [reportType, setReportType] = useState('monthly');
+  const [dateRange, setDateRange] = useState(() => ({
+    startDate: searchParams.get('startDate') || toInputDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    endDate: searchParams.get('endDate') || toInputDate(new Date())
+  }));
 
   useEffect(() => {
     fetchAnalytics();
@@ -42,29 +90,40 @@ export default function AnalyticsDashboard() {
       });
 
       const analytics = response.data.analytics;
-      
-      console.log('Analytics data:', analytics);
-      console.log('Monthly stats:', analytics.monthlyStats);
+      const overview = analytics.overview || {};
+      const revenue = analytics.revenue || {};
+      const payments = analytics.payments || {};
+
+      const websiteReceived = payments.websiteReceived ?? revenue.websiteOrders ?? 0;
+      const shopkeeperAmountPaid = payments.shopkeeperAmountPaid ?? 0;
+      const recoveriesCollected = payments.recoveriesCollected ?? revenue.recoveries ?? 0;
+      const totalReceived = payments.totalReceived ?? (websiteReceived + shopkeeperAmountPaid + recoveriesCollected);
+      const outstandingAmount = payments.outstandingAmount ?? 0;
 
       setStats({
-        totalRevenue: analytics.overview.totalRevenue || 0,
-        totalProfit: analytics.revenue.netPayment || 0,
-        totalSales: analytics.overview.totalOrders || 0,
-        totalUsers: analytics.overview.totalUsers || 0,
-        totalProducts: analytics.overview.totalProducts || 0,
-        totalOrders: analytics.overview.totalOrders || 0
+        totalRevenue: overview.totalRevenue || 0,
+        totalProfit: overview.totalProfit ?? revenue.netPayment ?? 0,
+        totalSales: overview.totalOrders || 0,
+        totalUsers: overview.totalUsers || 0,
+        totalProducts: overview.totalProducts || 0,
+        totalOrders: overview.totalOrders || 0
       });
 
       setMonthlyStats(analytics.monthlyStats || []);
       setDistributionStats({
-        websiteOrders: analytics.revenue.websiteOrders || 0,
-        shopkeeperOrders: analytics.revenue.shopkeeperOrders || 0,
-        recoveries: analytics.revenue.recoveries || 0
+        websiteReceived,
+        shopkeeperAmountPaid,
+        recoveriesCollected,
+        totalReceived,
+        outstandingAmount
       });
       setSalesStats({
-        totalRevenue: analytics.overview.totalRevenue || 0,
-        totalOrders: analytics.overview.totalOrders || 0,
-        averageOrderValue: analytics.overview.averageOrderValue || 0
+        totalRevenue: overview.totalRevenue || 0,
+        totalOrders: overview.totalOrders || 0,
+        averageSaleValue: overview.averageOrderValue || 0,
+        totalCommission: payments.totalCommission || 0,
+        totalQuantity: payments.totalQuantity || 0,
+        totalProfit: overview.totalProfit ?? revenue.netPayment ?? 0
       });
       setTopProducts(analytics.topProducts || []);
       setSalesmanPerformance(analytics.salesmanPerformance || []);
@@ -78,14 +137,143 @@ export default function AnalyticsDashboard() {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR'
-    }).format(amount);
+    return `PKR ${new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(amount || 0))}`;
   };
 
   const formatNumber = (num) => {
     return new Intl.NumberFormat('en-IN').format(num);
+  };
+
+  const safeMonthlyStats = monthlyStats || [];
+
+  const normalizedMonthlyStats = useMemo(() => {
+    return safeMonthlyStats
+      .map((entry) => {
+        if (entry?.month) {
+          const [year, month] = String(entry.month).split('-').map(Number);
+          if (!year || !month) return null;
+          return {
+            year,
+            month,
+            orders: Number(entry.orders || 0),
+            revenue: Number(entry.revenue || 0)
+          };
+        }
+
+        if (entry?._id?.year && entry?._id?.month) {
+          return {
+            year: Number(entry._id.year),
+            month: Number(entry._id.month),
+            orders: Number(entry.orders || 0),
+            revenue: Number(entry.revenue || 0)
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => (a.year - b.year) || (a.month - b.month));
+  }, [safeMonthlyStats]);
+
+  const reportRows = useMemo(() => {
+    if (!normalizedMonthlyStats.length) return [];
+
+    if (reportType === 'monthly') {
+      return normalizedMonthlyStats.map((row) => ({
+        key: `${row.year}-${row.month}`,
+        label: new Date(row.year, row.month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        orders: row.orders,
+        revenue: row.revenue,
+        averageOrderValue: row.orders > 0 ? row.revenue / row.orders : 0,
+        sortKey: row.year * 100 + row.month
+      }));
+    }
+
+    const grouped = new Map();
+    normalizedMonthlyStats.forEach((row) => {
+      let key;
+      let label;
+      let sortKey;
+
+      if (reportType === 'quarterly') {
+        const quarter = Math.floor((row.month - 1) / 3) + 1;
+        key = `${row.year}-Q${quarter}`;
+        label = `Q${quarter} ${row.year}`;
+        sortKey = row.year * 10 + quarter;
+      } else if (reportType === 'half-yearly') {
+        const half = row.month <= 6 ? 1 : 2;
+        key = `${row.year}-H${half}`;
+        label = `H${half} ${row.year}`;
+        sortKey = row.year * 10 + half;
+      } else {
+        key = `${row.year}`;
+        label = `${row.year}`;
+        sortKey = row.year;
+      }
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          key,
+          label,
+          orders: 0,
+          revenue: 0,
+          sortKey
+        });
+      }
+
+      const item = grouped.get(key);
+      item.orders += row.orders;
+      item.revenue += row.revenue;
+    });
+
+    return Array.from(grouped.values())
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map((item) => ({
+        ...item,
+        averageOrderValue: item.orders > 0 ? item.revenue / item.orders : 0
+      }));
+  }, [normalizedMonthlyStats, reportType]);
+
+  const reportSummary = useMemo(() => {
+    const totalOrders = reportRows.reduce((sum, row) => sum + row.orders, 0);
+    const totalRevenue = reportRows.reduce((sum, row) => sum + row.revenue, 0);
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    return {
+      totalOrders,
+      totalRevenue,
+      avgOrderValue
+    };
+  }, [reportRows]);
+
+  const handleApplyReportPeriod = () => {
+    setDateRange(getPresetDateRange(reportType));
+  };
+
+  const handlePrintReport = () => {
+    if (!reportRows.length) {
+      alert('No report data available for selected range.');
+      return;
+    }
+    window.print();
+  };
+
+  const getDateRangeQuery = () => {
+    return new URLSearchParams({
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate
+    }).toString();
+  };
+
+  const openReceivedDetails = () => {
+    navigate(`/admin/analytics/received-details?${getDateRangeQuery()}`);
+  };
+
+  const openOutstandingDetails = () => {
+    navigate(`/admin/analytics/outstanding-details?${getDateRangeQuery()}`);
   };
 
   if (loading) {
@@ -99,16 +287,49 @@ export default function AnalyticsDashboard() {
     );
   }
 
-  // Add error boundary for monthly stats
-  const safeMonthlyStats = monthlyStats || [];
-
   return (
     <div className="p-8">
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #analytics-print-area,
+          #analytics-print-area * {
+            visibility: visible;
+          }
+          #analytics-print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            box-shadow: none !important;
+            border: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Analytics Dashboard</h1>
         
         {/* Date Range Filter */}
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-wrap gap-4 items-end no-print">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
+            <select
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="half-yearly">Half-Yearly</option>
+              <option value="annually">Annually</option>
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
             <input
@@ -128,16 +349,90 @@ export default function AnalyticsDashboard() {
             />
           </div>
           <button
+            onClick={handleApplyReportPeriod}
+            className="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
+          >
+            Apply {reportTypeLabels[reportType]}
+          </button>
+          <button
             onClick={fetchAnalytics}
-            className="mt-6 bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
+            className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
           >
             Refresh
+          </button>
+          <button
+            onClick={handlePrintReport}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Print {reportTypeLabels[reportType]} Report
           </button>
         </div>
       </div>
 
+      <div id="analytics-print-area" className="bg-white p-6 rounded-lg shadow mb-8">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">{reportTypeLabels[reportType]} Analytics Report</h2>
+            <p className="text-sm text-gray-600">Date Range: {dateRange.startDate} to {dateRange.endDate}</p>
+          </div>
+          <p className="text-sm text-gray-500">Generated: {new Date().toLocaleString()}</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Period</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">Orders</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">Revenue</th>
+                <th className="px-4 py-2 text-right font-medium text-gray-600">Avg Order Value</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {reportRows.length > 0 ? (
+                reportRows.map((row) => (
+                  <tr key={row.key}>
+                    <td className="px-4 py-2 text-gray-900">{row.label}</td>
+                    <td className="px-4 py-2 text-right text-gray-900">{formatNumber(row.orders)}</td>
+                    <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(row.revenue)}</td>
+                    <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(row.averageOrderValue)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="4" className="px-4 py-6 text-center text-gray-500">No data available for selected range.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-6">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Report Orders</p>
+            <p className="text-lg font-semibold text-gray-900">{formatNumber(reportSummary.totalOrders)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Report Revenue</p>
+            <p className="text-lg font-semibold text-gray-900">{formatCurrency(reportSummary.totalRevenue)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Report Avg Order</p>
+            <p className="text-lg font-semibold text-gray-900">{formatCurrency(reportSummary.avgOrderValue)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Total Received</p>
+            <p className="text-lg font-semibold text-green-700">{formatCurrency(distributionStats.totalReceived || 0)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Outstanding Balance</p>
+            <p className="text-lg font-semibold text-red-700">{formatCurrency(distributionStats.outstandingAmount || 0)}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8 no-print">
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-lg">
@@ -224,7 +519,7 @@ export default function AnalyticsDashboard() {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 no-print">
         {/* Monthly Revenue Chart */}
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue Trend</h3>
@@ -281,36 +576,58 @@ export default function AnalyticsDashboard() {
           </div>
         </div>
 
-        {/* Distribution Stats */}
+        {/* Payment Breakdown */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribution Statistics</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Breakdown</h3>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total Distributions</span>
-              <span className="text-lg font-semibold text-gray-900">{formatNumber(distributionStats.totalDistributions || 0)}</span>
+              <span className="text-sm text-gray-600">Website Orders Received</span>
+              <span className="text-lg font-semibold text-gray-900">{formatCurrency(distributionStats.websiteReceived || 0)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total Quantity</span>
-              <span className="text-lg font-semibold text-gray-900">{formatNumber(distributionStats.totalQuantity || 0)}</span>
+              <span className="text-sm text-gray-600">Shopkeeper Paid at Order</span>
+              <span className="text-lg font-semibold text-gray-900">{formatCurrency(distributionStats.shopkeeperAmountPaid || 0)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total Amount</span>
-              <span className="text-lg font-semibold text-gray-900">{formatCurrency(distributionStats.totalAmount || 0)}</span>
+              <span className="text-sm text-gray-600">Recoveries Collected</span>
+              <span className="text-lg font-semibold text-gray-900">{formatCurrency(distributionStats.recoveriesCollected || 0)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Pending</span>
-              <span className="text-lg font-semibold text-yellow-600">{formatNumber(distributionStats.pendingDistributions || 0)}</span>
+              <span className="text-sm text-gray-600">Total Received</span>
+              <span className="text-lg font-semibold text-green-600">{formatCurrency(distributionStats.totalReceived || 0)}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Delivered</span>
-              <span className="text-lg font-semibold text-green-600">{formatNumber(distributionStats.deliveredDistributions || 0)}</span>
+              <span className="text-sm text-gray-600">Outstanding Shopkeeper Balance</span>
+              <span className="text-lg font-semibold text-red-600">{formatCurrency(distributionStats.outstandingAmount || 0)}</span>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 no-print">
+            <button
+              type="button"
+              onClick={openReceivedDetails}
+              className="text-left bg-gray-50 p-4 rounded-lg border border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors"
+            >
+              <p className="text-sm text-gray-600">Total Received</p>
+              <p className="text-3xl font-semibold text-green-700">{formatCurrency(distributionStats.totalReceived || 0)}</p>
+              <p className="text-xs text-gray-500 mt-1">Click to view who paid this amount</p>
+            </button>
+
+            <button
+              type="button"
+              onClick={openOutstandingDetails}
+              className="text-left bg-gray-50 p-4 rounded-lg border border-gray-200 hover:border-red-400 hover:bg-red-50 transition-colors"
+            >
+              <p className="text-sm text-gray-600">Outstanding Balance</p>
+              <p className="text-3xl font-semibold text-red-700">{formatCurrency(distributionStats.outstandingAmount || 0)}</p>
+              <p className="text-xs text-gray-500 mt-1">Click to view shopkeeper-wise outstanding</p>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Sales Performance */}
-      <div className="bg-white p-6 rounded-lg shadow">
+      <div className="bg-white p-6 rounded-lg shadow no-print">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Performance</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="text-center">
@@ -336,7 +653,7 @@ export default function AnalyticsDashboard() {
 
       {/* Top Products */}
       {topProducts.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow no-print">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">🏆 Top Products</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -369,7 +686,7 @@ export default function AnalyticsDashboard() {
 
       {/* Salesman Performance */}
       {salesmanPerformance.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow no-print">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">👨‍💼 Top Salesmen</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -406,7 +723,7 @@ export default function AnalyticsDashboard() {
 
       {/* Shopkeeper Performance */}
       {shopkeeperPerformance.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
+        <div className="bg-white p-6 rounded-lg shadow no-print">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">🏪 Top Shopkeepers</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

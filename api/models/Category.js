@@ -44,7 +44,6 @@ const categorySchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-categorySchema.index({ name: 1 });
 categorySchema.index({ isActive: 1 });
 categorySchema.index({ sortOrder: 1 });
 
