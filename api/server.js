@@ -1,6 +1,5 @@
 // server/server.js
 import express from "express";
-import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import {fileURLToPath} from 'url';
@@ -20,6 +19,7 @@ import receiptRoutes from "./routes/receiptRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import cityRoutes from "./routes/cityRoutes.js";
+import connectDB from "./utils/db.js";
 
 // Load environment variables first
 // Use explicit path to ensure .env is loaded from the api directory
@@ -113,7 +113,7 @@ app.use('*', (req, res) => {
     res.status(404).json({error: 'Route not found'});
 });
 
-mongoose.connect(process.env.MONGO_URI ).then(() => console.log("MongoDB connected")).catch(err => console.error(err));
+connectDB();
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
