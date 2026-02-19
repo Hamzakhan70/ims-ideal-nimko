@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../context/NotificationContext';
 
 const NotificationDropdown = () => {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, fetchNotifications } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
+  const listContainerRef = useRef(null);
+  const itemRefs = useRef(new Map());
+  const seenNotificationIds = useRef(new Set());
   const navigate = useNavigate();
 
   const formatTime = (date) => {
@@ -42,23 +45,88 @@ const NotificationDropdown = () => {
     }
   };
 
-  // Filter to only show order notifications count
-  const orderNotifications = notifications.filter(n => n.type === 'order');
-  const unreadOrderCount = orderNotifications.filter(n => !n.isRead).length;
+  const unreadNotificationCount = notifications.filter((notification) => !notification.isRead).length;
+  const parsedUnreadCount = Number.parseInt(unreadCount, 10);
+  const effectiveUnreadCount = Number.isFinite(parsedUnreadCount) && parsedUnreadCount >= 0
+    ? parsedUnreadCount
+    : unreadNotificationCount;
+
+  const markNotificationAsSeen = (notification) => {
+    if (!notification || notification.isRead) {
+      return;
+    }
+    if (seenNotificationIds.current.has(notification._id)) {
+      return;
+    }
+    seenNotificationIds.current.add(notification._id);
+    markAsRead(notification._id);
+  };
+
+  const toggleDropdown = async () => {
+    const nextOpenState = !isOpen;
+    setIsOpen(nextOpenState);
+    if (nextOpenState) {
+      await fetchNotifications();
+    }
+  };
+
+  const setNotificationRef = (notificationId) => (node) => {
+    if (!node) {
+      itemRefs.current.delete(notificationId);
+      return;
+    }
+    itemRefs.current.set(notificationId, node);
+  };
+
+  useEffect(() => {
+    if (!isOpen || !listContainerRef.current) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) {
+            return;
+          }
+
+          const notificationId = entry.target.getAttribute('data-notification-id');
+          if (!notificationId) {
+            return;
+          }
+
+          const notification = notifications.find((item) => item._id === notificationId);
+          markNotificationAsSeen(notification);
+        });
+      },
+      {
+        root: listContainerRef.current,
+        threshold: 0.6
+      }
+    );
+
+    itemRefs.current.forEach((node) => {
+      observer.observe(node);
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOpen, notifications]);
 
   return (
     <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleDropdown}
         className="relative p-2 text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg transition-colors"
         title="Notifications"
       >
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
-        {unreadOrderCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
-            {unreadOrderCount > 9 ? '9+' : unreadOrderCount}
+        {effectiveUnreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-5 h-5 px-1 flex items-center justify-center leading-none animate-pulse">
+            {effectiveUnreadCount}
           </span>
         )}
       </button>
@@ -69,13 +137,13 @@ const NotificationDropdown = () => {
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">
                 Notifications
-                {unreadCount > 0 && (
+                {effectiveUnreadCount > 0 && (
                   <span className="ml-2 text-sm font-normal text-gray-500">
-                    ({unreadCount} unread)
+                    ({effectiveUnreadCount} unread)
                   </span>
                 )}
               </h3>
-              {unreadCount > 0 && (
+              {effectiveUnreadCount > 0 && (
                 <button
                   onClick={markAllAsRead}
                   className="text-sm text-blue-600 hover:text-blue-800"
@@ -86,7 +154,7 @@ const NotificationDropdown = () => {
             </div>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div ref={listContainerRef} className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="p-4 text-center text-gray-500">
                 <div className="text-4xl mb-2">🔔</div>
@@ -96,13 +164,13 @@ const NotificationDropdown = () => {
               notifications.map((notification) => (
                 <div
                   key={notification._id}
+                  ref={setNotificationRef(notification._id)}
+                  data-notification-id={notification._id}
                   className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
                     !notification.isRead ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                   }`}
                   onClick={() => {
-                    if (!notification.isRead) {
-                      markAsRead(notification._id);
-                    }
+                    markNotificationAsSeen(notification);
                     setIsOpen(false);
                     
                     // Navigate to order page if it's an order notification

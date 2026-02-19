@@ -106,7 +106,15 @@ NotificationSchema.virtual('isRead').get(function() {
 
 // Method to mark as read by a user
 NotificationSchema.methods.markAsRead = function(userId) {
-  const existingRead = this.readBy.find(read => read.user.toString() === userId.toString());
+  const userIdStr = userId?.toString ? userId.toString() : String(userId);
+  const existingRead = this.readBy.find((read) => {
+    if (!read || !read.user) {
+      return false;
+    }
+    const readUser = read.user._id ? read.user._id : read.user;
+    const readUserIdStr = readUser?.toString ? readUser.toString() : String(readUser);
+    return readUserIdStr === userIdStr;
+  });
   if (!existingRead) {
     this.readBy.push({ user: userId, readAt: new Date() });
     return this.save();
@@ -127,7 +135,8 @@ NotificationSchema.methods.isReadBy = function(userId) {
     if (!read || !read.user) {
       return false;
     }
-    const readUserIdStr = read.user.toString ? read.user.toString() : String(read.user);
+    const readUser = read.user._id ? read.user._id : read.user;
+    const readUserIdStr = readUser.toString ? readUser.toString() : String(readUser);
     return readUserIdStr === userIdStr;
   });
 };

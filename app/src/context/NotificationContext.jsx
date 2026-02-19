@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { api } from '../utils/api';
+import { useAdmin } from './AdminContext';
 
 const NotificationContext = createContext();
 
@@ -16,6 +17,7 @@ export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const { isAuthenticated, token } = useAdmin();
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -33,7 +35,8 @@ export const NotificationProvider = ({ children }) => {
       
       if (response.data && response.data.success) {
         setNotifications(response.data.notifications || []);
-        setUnreadCount(response.data.unreadCount || 0);
+        const normalizedUnread = Number.parseInt(response.data.unreadCount, 10);
+        setUnreadCount(Number.isFinite(normalizedUnread) && normalizedUnread >= 0 ? normalizedUnread : 0);
       } else {
         console.error('Unexpected notification response format:', response.data);
         setNotifications([]);
@@ -105,16 +108,18 @@ export const NotificationProvider = ({ children }) => {
     setUnreadCount(0);
   };
 
-  // Auto-fetch notifications every 30 seconds
+  // Auto-fetch notifications every 30 seconds when user is authenticated
   useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
+    fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, []);
-
-  // Initial fetch
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
+  }, [isAuthenticated, token]);
 
   const value = {
     notifications,
