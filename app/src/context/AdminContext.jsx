@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import axios from 'axios';
+import { api } from '../utils/api';
+import { AUTH_TOKEN_STORAGE_KEY, AUTH_USER_ID_STORAGE_KEY, REQUEST_TIMEOUT_MS } from '../config/appConfig';
 
 const AdminContext = createContext();
-
-// Central API base URL for both local and production
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://ideal-nimko-web-production-e088.up.railway.app/api');
 
 const adminReducer = (state, action) => {
   switch (action.type) {
@@ -49,7 +48,7 @@ export const AdminProvider = ({ children }) => {
   const [state, dispatch] = useReducer(adminReducer, {
     isAuthenticated: false,
     admin: null,
-    token: localStorage.getItem('adminToken'),
+    token: localStorage.getItem(AUTH_TOKEN_STORAGE_KEY),
     loading: true, // Start with loading true to prevent immediate redirect
     error: null
   });
@@ -69,7 +68,7 @@ export const AdminProvider = ({ children }) => {
   const verifyToken = async () => {
     try {
       // Try new user system first
-      const response = await axios.get(`${API_BASE}/users/profile`);
+      const response = await axios.get(api.users.profile());
       dispatch({
         type: 'LOGIN_SUCCESS',
         payload: {
@@ -78,10 +77,9 @@ export const AdminProvider = ({ children }) => {
         }
       });
     } catch (error) {
-      console.log('Token verification failed:', error.message);
       // Try old admin system as fallback (same API base, different path)
       try {
-        const response = await axios.get(`${API_BASE}/admin/profile`);
+        const response = await axios.get(api.admin.profile());
         dispatch({
           type: 'LOGIN_SUCCESS',
           payload: {
@@ -90,10 +88,9 @@ export const AdminProvider = ({ children }) => {
           }
         });
       } catch (fallbackError) {
-        console.log('Fallback authentication failed:', fallbackError.message);
         dispatch({ type: 'LOGOUT' });
-        localStorage.removeItem('adminToken');
-        localStorage.removeItem('userId');
+        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        localStorage.removeItem(AUTH_USER_ID_STORAGE_KEY);
       }
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -138,13 +135,13 @@ export const AdminProvider = ({ children }) => {
     dispatch({ type: 'LOGIN_START' });
     try {
       // Try new user system first
-      const response = await axios.post(`${API_BASE}/users/login`, { email, password }, {
-        timeout: 10000 // 10 second timeout
+      const response = await axios.post(api.users.login(), { email, password }, {
+        timeout: REQUEST_TIMEOUT_MS
       });
       const { token, ...userData } = response.data;
       
-      localStorage.setItem('adminToken', token);
-      localStorage.setItem('userId', userData.user?._id || userData._id);
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+      localStorage.setItem(AUTH_USER_ID_STORAGE_KEY, userData.user?._id || userData._id);
       dispatch({
         type: 'LOGIN_SUCCESS',
         payload: { token, admin: userData }
@@ -164,7 +161,6 @@ export const AdminProvider = ({ children }) => {
       
       // Only try fallback for authentication errors (401, 403, etc.)
       if (error.response?.status === 401 || error.response?.status === 403) {
-        console.log('New user system login failed, trying admin system...');
       } else {
         // For other errors, return immediately
         const errorMessage = getErrorMessage(error);
@@ -177,13 +173,13 @@ export const AdminProvider = ({ children }) => {
       
       try {
         // Fallback to old admin system
-        const response = await axios.post(`${API_BASE}/admin/login`, { email, password }, {
-          timeout: 10000 // 10 second timeout
+        const response = await axios.post(api.admin.login(), { email, password }, {
+          timeout: REQUEST_TIMEOUT_MS
         });
         const { token, admin } = response.data;
         
-        localStorage.setItem('adminToken', token);
-        localStorage.setItem('userId', admin?._id);
+        localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+        localStorage.setItem(AUTH_USER_ID_STORAGE_KEY, admin?._id);
         dispatch({
           type: 'LOGIN_SUCCESS',
           payload: { token, admin }
@@ -202,8 +198,8 @@ export const AdminProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('userId');
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    localStorage.removeItem(AUTH_USER_ID_STORAGE_KEY);
     delete axios.defaults.headers.common['Authorization'];
     dispatch({ type: 'LOGOUT' });
   };

@@ -53,7 +53,6 @@ export default function HomePage() {
     const fetchFeaturedProducts = async () => {
       try {
         const response = await getProducts();
-        console.log('HomePage products response:', response);
         
         // Handle both direct array and wrapped response
         const products = response.products || response;

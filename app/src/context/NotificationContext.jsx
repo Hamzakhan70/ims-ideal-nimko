@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { api } from '../utils/api';
 import { useAdmin } from './AdminContext';
+import { AUTH_TOKEN_STORAGE_KEY, NOTIFICATION_POLL_INTERVAL_MS } from '../config/appConfig';
 
 const NotificationContext = createContext();
 
@@ -23,7 +24,7 @@ export const NotificationProvider = ({ children }) => {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
       
       if (!token) {
         return;
@@ -59,7 +60,7 @@ export const NotificationProvider = ({ children }) => {
   // Mark notification as read
   const markAsRead = async (notificationId) => {
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
       await axios.put(api.notifications.markAsRead(notificationId), {}, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -80,7 +81,7 @@ export const NotificationProvider = ({ children }) => {
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
       await axios.put(api.notifications.markAllAsRead(), {}, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -117,7 +118,7 @@ export const NotificationProvider = ({ children }) => {
     }
 
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
+    const interval = setInterval(fetchNotifications, NOTIFICATION_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [isAuthenticated, token]);
 

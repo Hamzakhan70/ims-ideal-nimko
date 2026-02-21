@@ -33,7 +33,6 @@ const createOrderNotification = async (order) => {
       });
 
       await notification.save();
-      console.log('Order notification created:', notification._id);
     }
   } catch (error) {
     console.error('Error creating order notification:', error);

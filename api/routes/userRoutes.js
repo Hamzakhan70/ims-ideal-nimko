@@ -2,13 +2,16 @@ import express from 'express';
 import User from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
+import { getRequiredEnv } from '../config/runtimeConfig.js';
+import { JWT_EXPIRES_IN_USER } from '../config/constants.js';
 
 const router = express.Router();
+const JWT_SECRET = getRequiredEnv('JWT_SECRET');
 
 // Generate JWT token
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'ideal_nimko_secret_key_2024', {
-    expiresIn: '1h',
+  return jwt.sign({ id }, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN_USER,
   });
 };
 

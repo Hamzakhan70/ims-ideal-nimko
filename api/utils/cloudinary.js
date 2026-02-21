@@ -30,10 +30,6 @@ const ensureCloudinaryConfigured = () => {
         api_secret: apiSecret // Note: snake_case, not camelCase
     });
 
-    console.log('✅ Cloudinary configured successfully');
-    console.log('   Cloud Name:', cloudName);
-    console.log('   API Key:', apiKey ?. substring(0, 6) + '...');
-
     isConfigured = true;
     return true;
 };
@@ -52,7 +48,7 @@ const upload = multer({
     storage: multer.memoryStorage(),
     fileFilter: fileFilter,
     limits: {
-        fileSize: 50 * 1024 * 1024 // 5MB limit
+        fileSize: 50 * 1024 * 1024 // 50MB limit
     }
 });
 
@@ -153,7 +149,6 @@ export const deleteImage = async (imageUrl) => { // Ensure Cloudinary is configu
     try { // Extract public_id from Cloudinary URL
         const urlParts = imageUrl.split('/upload/');
         if (urlParts.length < 2) {
-            console.log('Invalid Cloudinary URL:', imageUrl);
             return;
         }
 

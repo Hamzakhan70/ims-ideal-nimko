@@ -31,11 +31,6 @@ export default function SalesmanOrderPlacement() {
     const fetchData = async () => {
         try {
             const token = localStorage.getItem('adminToken');
-            console.log('🔍 Debug - Token check:', {
-                token: token ? 'Present' : 'Missing',
-                tokenLength: token ? token.length : 0,
-                localStorageKeys: Object.keys(localStorage)
-            });
 
             if (! token) {
                 console.error('No authentication token found');
@@ -49,7 +44,6 @@ export default function SalesmanOrderPlacement() {
 
             // Get current user ID from token or localStorage
             const userId = localStorage.getItem('userId') || localStorage.getItem('adminId');
-            console.log('🔍 Debug - User ID:', userId);
 
             if (! userId) {
                 console.error('No user ID found');
@@ -85,7 +79,6 @@ export default function SalesmanOrderPlacement() {
             const productsData = productsResponse.data.products || productsResponse.data || [];
             setProducts(Array.isArray(productsData) ? productsData : []);
             const shopkeepersData = shopkeepersResponse.data.shopkeepers || shopkeepersResponse.data || [];
-            console.log('Fetched shopkeepers:', shopkeepersData);
             setShopkeepers(Array.isArray(shopkeepersData) ? shopkeepersData : []);
             // categories endpoint returns { success, categories: [ { name, ... } ] } or array
             const rawCategories = categoriesResponse ?. data ?. categories || categoriesResponse ?. data || [];
@@ -107,7 +100,6 @@ export default function SalesmanOrderPlacement() {
                 });
                 const productsData = productsResponse.data.products || productsResponse.data || [];
                 setProducts(Array.isArray(productsData) ? productsData : []);
-                console.log('Products loaded successfully');
             } catch (productError) {
                 console.error('Error loading products:', productError);
             }
@@ -117,7 +109,6 @@ export default function SalesmanOrderPlacement() {
                 const rawCategories = categoriesResponse ?. data ?. categories || categoriesResponse ?. data || [];
                 const normalizedCategories = Array.isArray(rawCategories) ? rawCategories.map(c => (typeof c === 'string' ? c : c ?. name)).filter(Boolean) : [];
                 setCategories(normalizedCategories);
-                console.log('Categories loaded successfully');
             } catch (categoriesError) {
                 console.error('Error loading categories:', categoriesError);
             }
@@ -131,25 +122,21 @@ export default function SalesmanOrderPlacement() {
                 });
                 const citiesData = citiesResponse ?. data ?. cities || [];
                 setCities(Array.isArray(citiesData) ? citiesData : []);
-                console.log('Cities loaded successfully');
             } catch (citiesError) {
                 console.error('Error loading cities:', citiesError);
             }
 
             // If assignment API fails, try to fetch all shopkeepers as fallback
             try {
-                console.log('Assignment API failed, trying fallback to all shopkeepers...');
                 const fallbackResponse = await axios.get(api.shopkeepers.getAll(), {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
                 const fallbackShopkeepers = fallbackResponse.data.shopkeepers || [];
-                console.log('Fallback successful, loaded shopkeepers:', fallbackShopkeepers);
                 setShopkeepers(Array.isArray(fallbackShopkeepers) ? fallbackShopkeepers : []);
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
-                console.log('No shopkeepers available - this might be expected if no assignments exist');
                 setShopkeepers([]);
                 // Don't show error alert for shopkeepers, just log it
             }
@@ -300,7 +287,6 @@ export default function SalesmanOrderPlacement() {
                 queryString ? `?${queryString}` : ''
             }`;
 
-            console.log('Fetching shopkeepers with city filter:', cityId);
             const response = await axios.get(url, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -308,7 +294,6 @@ export default function SalesmanOrderPlacement() {
             });
 
             const shopkeepersData = response.data.shopkeepers || response.data || [];
-            console.log('Fetched shopkeepers:', shopkeepersData);
             setShopkeepers(Array.isArray(shopkeepersData) ? shopkeepersData : []);
         } catch (error) {
             console.error('Error fetching shopkeepers by city:', error);
@@ -329,7 +314,6 @@ export default function SalesmanOrderPlacement() {
                     }
                 });
                 const fallbackShopkeepers = fallbackResponse.data.shopkeepers || [];
-                console.log('Fallback shopkeepers fetched:', fallbackShopkeepers);
                 setShopkeepers(Array.isArray(fallbackShopkeepers) ? fallbackShopkeepers : []);
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
@@ -399,9 +383,6 @@ export default function SalesmanOrderPlacement() {
                 amountPaid: parseFloat(orderForm.amountPaid) || 0
             };
 
-            // Debug: Log the order data to see custom prices
-            console.log('🔍 Order Data with Custom Prices:', orderData);
-
             const response = await axios.post(api.shopkeeperOrders.create(), orderData, {
                 headers: {
                     'Authorization': `Bearer ${
@@ -410,21 +391,15 @@ export default function SalesmanOrderPlacement() {
                 }
             });
 
-            console.log('Order created:', response.data);
-
             // Update product stock for each item in the order
             try {
                 for (const item of cart) {
                     await updateProductStock(item.productId, item.quantity);
                 }
-                console.log('Product stock updated successfully');
             } catch (stockError) {
                 console.error('Error updating product stock:', stockError);
                 showWarning('Order created but failed to update product stock. Please check inventory manually.');
             }
-
-            console.log('Order created response:', response.data.order);
-            console.log('Shopkeeper data in order:', response.data.order.shopkeeper);
             setLastOrder(response.data.order);
             setShowReceipt(true);
 

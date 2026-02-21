@@ -77,7 +77,6 @@ router.get("/:id", async (req, res) => {
 router.get("/categories/list", async (req, res) => {
     try {
         const categories = await Product.distinct("category");
-        console.log('Categories:-->', categories);
         res.json(categories);
     } catch (error) {
         res.status(500).json({error: error.message});
@@ -195,7 +194,6 @@ router.delete("/", authenticateToken, async (req, res) => {
 
 // Upload product images
 router.post("/upload-images", authenticateToken, upload.array('images', 5), uploadToCloudinary, async (req, res) => {
-    console.log('✅ Authentication passed, proceeding with upload...');
     try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({error: 'No files uploaded'});

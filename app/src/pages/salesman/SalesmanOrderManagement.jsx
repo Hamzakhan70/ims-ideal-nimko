@@ -37,7 +37,6 @@ export default function SalesmanOrderManagement() {
         }
       });
       setOrders(response.data.orders || response.data);
-      console.log(response.data.orders,'response.data.orders');
     } catch (error) {
       console.error('Error fetching orders:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Failed to fetch orders';

@@ -1,8 +1,8 @@
 // src/api/api.js
 import axios from "axios";
+import { API_BASE_URL } from "../config/appConfig";
 
-const RAW_BASE = (import.meta.env.VITE_API_URL || "https://ideal-nimko-web-production-e088.up.railway.app").replace(/\/$/, "");
-export const API_URL = /\/api$/i.test(RAW_BASE) ? RAW_BASE : `${RAW_BASE}/api`;
+export const API_URL = API_BASE_URL;
 
 export const getProducts = async (params = {}) => {
   const response = await axios.get(`${API_URL}/products`, { params });

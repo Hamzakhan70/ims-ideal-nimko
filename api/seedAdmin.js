@@ -10,7 +10,7 @@ const adminData = {
 
 async function seedAdmin() {
   try {
-    await mongoose.connect(process.env.MONGO_URI || "mongodb+srv://idealNimko_web:DJWA9ifrzq01GmxB@cluster0.er7vznc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0/ideal-nimko");
+    await mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/ideal-nimko");
     console.log("Connected to MongoDB");
     
     // Check if admin already exists

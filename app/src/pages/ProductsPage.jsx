@@ -12,7 +12,6 @@ export default function ProductsPage() {
     const fetchProducts = async () => {
       try {
         const response = await getProducts();
-        console.log('Products response:', response);
         
         // Handle both direct array and wrapped response
         const productsData = response.products || response;
@@ -52,10 +51,6 @@ export default function ProductsPage() {
       </div>
     );
   }
-
-  console.log('ProductsPage - products:', products);
-  console.log('ProductsPage - categories:', categories);
-  console.log('ProductsPage - filteredProducts:', filteredProducts);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

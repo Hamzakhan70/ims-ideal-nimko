@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import axios from 'axios';
 import {api} from '../../utils/api';
+import { AUTH_TOKEN_STORAGE_KEY } from '../../config/appConfig';
 import Pagination from '../../components/common/Pagination';
 import {usePagination} from '../../hooks/usePagination';
 
@@ -30,7 +31,7 @@ export default function SettingsPage() {
 
     // Fetch function for pagination hook
     const fetchUsers = useCallback(async (params) => {
-        const token = localStorage.getItem('adminToken');
+        const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
         const queryParams = new URLSearchParams({
             page: params.page,
             limit: params.limit,
@@ -88,7 +89,7 @@ export default function SettingsPage() {
     const fetchCities = async () => {
         setLoadingCities(true);
         try {
-            const token = localStorage.getItem('adminToken');
+            const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
             const response = await axios.get(api.cities.getAll(), {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -108,12 +109,12 @@ export default function SettingsPage() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            const headers = { 'Authorization': `Bearer ${token}` };
             if (editingUser) {
-                await axios.put(`http://localhost:5000/api/users/${
-                    editingUser._id
-                }`, userForm);
+                await axios.put(api.users.update(editingUser._id), userForm, { headers });
             } else {
-                await axios.post('http://localhost:5000/api/users', userForm);
+                await axios.post(api.users.create(), userForm, { headers });
             }
             setShowUserModal(false);
             setEditingUser(null);
@@ -142,8 +143,11 @@ export default function SettingsPage() {
     const handleDelete = async (userId) => {
         if (window.confirm('Are you sure you want to delete this user?')) {
             try {
-                await axios.delete(`http://localhost:5000/api/users/${userId}`);
-                fetchUsers();
+                const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+                await axios.delete(api.users.delete(userId), {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                refreshUsers();
             } catch (error) {
                 console.error('Error deleting user:', error);
             }
@@ -152,8 +156,11 @@ export default function SettingsPage() {
 
     const toggleUserStatus = async (userId) => {
         try {
-            await axios.put(`http://localhost:5000/api/users/${userId}/toggle-status`);
-            fetchUsers();
+            const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            await axios.put(api.users.toggleStatus(userId), {}, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            refreshUsers();
         } catch (error) {
             console.error('Error toggling user status:', error);
         }
@@ -192,7 +199,7 @@ export default function SettingsPage() {
     const handleCitySubmit = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('adminToken');
+            const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
             const headers = {
                 'Authorization': `Bearer ${token}`
             };
@@ -227,7 +234,7 @@ export default function SettingsPage() {
         }
 
         try {
-            const token = localStorage.getItem('adminToken');
+            const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
             await axios.delete(api.cities.delete(cityId), {
                 headers: {
                     'Authorization': `Bearer ${token}`

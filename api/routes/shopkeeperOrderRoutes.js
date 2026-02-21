@@ -39,7 +39,6 @@ const createShopkeeperOrderNotification = async (order) => {
       });
 
       await notification.save();
-      console.log('Shopkeeper order notification created:', notification._id);
     }
   } catch (error) {
     console.error('Error creating shopkeeper order notification:', error);
@@ -201,8 +200,6 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
     await User.findByIdAndUpdate(shopkeeper._id, {
       pendingAmount: newPendingAmount
     });
-    
-    console.log(`Order pending: ₹${orderPendingAmount}, Updated shopkeeper ${shopkeeper.name} pending amount: ${currentPendingAmount} → ${newPendingAmount}`);
 
     // Populate the order data
     await order.populate([

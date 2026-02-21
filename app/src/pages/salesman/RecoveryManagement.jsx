@@ -60,7 +60,6 @@ export default function RecoveryManagement() {
         }),
         axios.get(api.products.getAll())
       ]);
-      console.log('Shopkeepers response:', shopkeepersResponse.data.shopkeepers);
       setRecoveries(recoveriesResponse.data.recoveries || []);
       setShopkeepers(shopkeepersResponse.data.shopkeepers || []);
       setProducts(productsResponse.data.products || productsResponse.data || []);

@@ -2,9 +2,11 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import Admin from "../models/Admin.js";
 import { authenticateToken, requireSuperAdmin } from "../middleware/auth.js";
+import { getRequiredEnv } from "../config/runtimeConfig.js";
+import { JWT_EXPIRES_IN_ADMIN } from "../config/constants.js";
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "ideal_nimko_secret_key_2024";
+const JWT_SECRET = getRequiredEnv("JWT_SECRET");
 
 // Admin login
 router.post("/login", async (req, res) => {
@@ -34,7 +36,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { id: admin._id, role: admin.role },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: JWT_EXPIRES_IN_ADMIN }
     );
 
     res.json({

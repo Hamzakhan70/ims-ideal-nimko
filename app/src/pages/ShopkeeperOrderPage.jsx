@@ -1,5 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import axios from 'axios';
+import { api } from '../utils/api';
+import { AUTH_TOKEN_STORAGE_KEY } from '../config/appConfig';
 
 export default function ShopkeeperOrderPage() {
     const [products, setProducts] = useState([]);
@@ -16,7 +18,7 @@ export default function ShopkeeperOrderPage() {
 
     const fetchProducts = async () => {
         try {
-            const response = await axios.get('http://localhost:5000/api/products');
+            const response = await axios.get(api.products.getAll());
             setProducts(response.data.products || response.data);
         } catch (error) {
             console.error('Error fetching products:', error);
@@ -81,10 +83,10 @@ export default function ShopkeeperOrderPage() {
                 paymentMethod: orderForm.paymentMethod
             };
 
-            const response = await axios.post('http://localhost:5000/api/shopkeeper-orders', orderData, {
+            await axios.post(api.shopkeeperOrders.create(), orderData, {
                 headers: {
                     'Authorization': `Bearer ${
-                        localStorage.getItem('adminToken')
+                        localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
                     }`
                 }
             });

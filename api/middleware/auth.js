@@ -1,8 +1,10 @@
 import jwt from "jsonwebtoken";
 import Admin from "../models/Admin.js";
 import User from "../models/User.js";
+import { getRequiredEnv } from "../config/runtimeConfig.js";
+import logger from "../utils/logger.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "ideal_nimko_secret_key_2024";
+const JWT_SECRET = getRequiredEnv("JWT_SECRET");
 
 export const authenticateToken = async (req, res, next) => {
   try {
@@ -10,7 +12,6 @@ export const authenticateToken = async (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
-      console.log('❌ No token provided in request');
       return res.status(401).json({ error: 'Access token required' });
     }
 
@@ -36,18 +37,18 @@ export const authenticateToken = async (req, res, next) => {
       }
       
       if (!user || !user.isActive) {
-        console.log('❌ User not found or inactive:', decoded.id);
         return res.status(401).json({ error: 'Invalid or inactive user' });
       }
 
       req.user = user;
+      req.admin = user;
       next();
     } catch (jwtError) {
-      console.error('❌ JWT verification failed:', jwtError.message);
+      logger.error('JWT verification failed', jwtError.message);
       return res.status(403).json({ error: 'Invalid or expired token', details: jwtError.message });
     }
   } catch (error) {
-    console.error('❌ Authentication error:', error);
+    logger.error('Authentication error', error);
     return res.status(500).json({ error: 'Authentication failed', details: error.message });
   }
 };

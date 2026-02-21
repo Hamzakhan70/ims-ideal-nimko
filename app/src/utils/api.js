@@ -1,14 +1,12 @@
-// API Configuration
-const RAW_BASE = (import.meta.env.VITE_API_URL );
-// Remove /api suffix if present to normalize the base URL
-export const API_BASE_URL = RAW_BASE;
-
+import { API_BASE_URL } from '../config/appConfig';
 
 const withApi = (path) => {
   // Ensure path starts with /
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${API_BASE_URL}${normalizedPath}`;
 };
+
+export { API_BASE_URL };
 
 export const api = {
   // Products
@@ -64,6 +62,7 @@ export const api = {
     getById: (id) => withApi(`/users/${id}`),
     create: () => withApi('/users'),
     update: (id) => withApi(`/users/${id}`),
+    toggleStatus: (id) => withApi(`/users/${id}/toggle-status`),
     delete: (id) => withApi(`/users/${id}`),
     profile: () => withApi('/users/profile'),
     login: () => withApi('/users/login')

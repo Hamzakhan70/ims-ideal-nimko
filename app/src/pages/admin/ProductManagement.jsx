@@ -91,7 +91,6 @@ export default function ProductManagement() {
     const fetchCategories = async () => {
         try {
             const response = await axios.get(api.categories.getAll());
-            console.log('Categories fetched:', response.data);
             setCategories(response.data.categories || []);
         } catch (error) {
             console.error('Error fetching categories:', error);
@@ -271,8 +270,6 @@ export default function ProductManagement() {
             files.forEach(file => {
                 formData.append('images', file);
             });
-
-            console.log('Uploading images with token:', token ? 'Token present' : 'No token');
 
             const response = await axios.post(api.products.uploadImages(), formData, {
                 headers: {
