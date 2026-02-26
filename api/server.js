@@ -29,7 +29,7 @@ const corsOriginsEnv = [getEnv('CORS_ORIGINS', ''), getEnv('CORS_ORIGIN', '')]
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const allowedOrigins = [...new Set([...DEFAULT_CORS_ORIGINS, ...corsOriginsEnv])];
+const allowedOrigins = [...new Set([...DEFAULT_CORS_ORIGINS, ...corsOriginsEnv,'http://173.249.51.82',])];
 
 const corsOptions = {
   origin(origin, callback) {
