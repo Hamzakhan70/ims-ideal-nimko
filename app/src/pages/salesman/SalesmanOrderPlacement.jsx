@@ -1,8 +1,8 @@
-import React, {useState, useEffect, useMemo} from 'react';
 import axios from 'axios';
-import {api} from '../../utils/api';
-import {useToast} from '../../context/ToastContext';
+import React, { useEffect, useMemo, useState } from 'react';
 import Pagination from '../../components/common/Pagination';
+import { useToast } from '../../context/ToastContext';
+import { api } from '../../utils/api';
 
 export default function SalesmanOrderPlacement() {
     const {showSuccess, showError, showWarning, showInfo} = useToast();
@@ -250,6 +250,36 @@ export default function SalesmanOrderPlacement() {
         }, 0);
     };
 
+    const getItemDiscountPerUnit = (item) => {
+        const storedPerUnit = Number(item.discountPerUnit ?? item.discountAmount);
+        if (Number.isFinite(storedPerUnit) && storedPerUnit > 0) {
+            return storedPerUnit;
+        }
+
+        const originalUnitPrice = Number(item.originalUnitPrice ?? item.originalPrice ?? item.product ?. price);
+        const unitPrice = Number(item.unitPrice);
+        if (Number.isFinite(originalUnitPrice) && Number.isFinite(unitPrice) && originalUnitPrice > unitPrice) {
+            return Number((originalUnitPrice - unitPrice).toFixed(2));
+        }
+
+        return 0;
+    };
+
+    const getItemDiscountTotal = (item) => {
+        const storedTotal = Number(item.discountTotal);
+        if (Number.isFinite(storedTotal) && storedTotal > 0) {
+            return storedTotal;
+        }
+        return Number((getItemDiscountPerUnit(item) * (Number(item.quantity) || 0)).toFixed(2));
+    };
+
+    const getOrderTotalDiscount = (order) => {
+        if (! order ?. items) {
+            return 0;
+        }
+        return Number(order.items.reduce((sum, item) => sum + getItemDiscountTotal(item), 0).toFixed(2));
+    };
+
     const handleCityChange = async (cityId) => {
         setSelectedCity(cityId);
         // Reset shopkeeper selection when city changes
@@ -367,14 +397,14 @@ export default function SalesmanOrderPlacement() {
             const orderData = {
                 items: cart.map(item => {
                     const effectivePrice = item.customPrice === '' ? item.originalPrice : item.customPrice;
+                    const discountAmount = Math.max(0, item.originalPrice - effectivePrice);
                     return {
                         productId: item.productId,
                         quantity: item.quantity,
                         originalPrice: item.originalPrice,
                         customPrice: effectivePrice,
-                        discountPercentage: (
-                            (item.originalPrice - effectivePrice) / item.originalPrice * 100
-                        ).toFixed(2)
+                        discountAmount: Number(discountAmount.toFixed(2)),
+                        discountPercentage: item.originalPrice > 0 ? Number(((discountAmount / item.originalPrice) * 100).toFixed(2)) : 0
                     };
                 }),
                 shopkeeperId: selectedShopkeeper,
@@ -461,6 +491,10 @@ export default function SalesmanOrderPlacement() {
 
     const printReceipt = async () => {
         const printWindow = window.open('', '_blank');
+        if (! printWindow) {
+            showError('Please allow popups to print the receipt.');
+            return;
+        }
         const receiptContent = document.getElementById('receipt-content').innerHTML;
 
         printWindow.document.write(`
@@ -470,41 +504,36 @@ export default function SalesmanOrderPlacement() {
             lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
         }</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
-            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-            .header h1 { margin: 0; font-size: 24px; color: #333; }
-            .header p { margin: 5px 0 0 0; font-size: 16px; color: #666; }
-            .order-info { margin-bottom: 20px; background: #f9f9f9; padding: 15px; border-radius: 5px; }
-            .order-info p { margin: 5px 0; }
-            .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            .items-table th, .items-table td { border: 1px solid #000; padding: 10px; text-align: left; }
-            .items-table th { background-color: #f0f0f0; font-weight: bold; }
-            .items-table tbody tr:nth-child(even) { background-color: #f9f9f9; }
-            .total { font-weight: bold; font-size: 18px; background-color: #e9e9e9; }
-            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #666; }
-            .shop-name { font-size: 18px; font-weight: bold; color: #2c5aa0; margin: 10px 0; }
-            @media print {
-              body { margin: 0; }
-              .no-print { display: none; }
-              .header { page-break-inside: avoid; }
-              .items-table { page-break-inside: avoid; }
-            }
+            @page { size: 80mm auto; margin: 3mm; }
+            body { font-family: "Courier New", monospace; margin: 0; padding: 0; font-size: 11px; line-height: 1.25; color: #000; }
+            .receipt-wrapper { width: 72mm; margin: 0 auto; }
+            .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 4px; margin-bottom: 6px; }
+            .header h1 { margin: 0; font-size: 14px; letter-spacing: 0.3px; }
+            .order-info { margin-bottom: 8px; }
+            .order-info p { margin: 2px 0; }
+            .items-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }
+            .items-table th, .items-table td { border: 1px solid #000; padding: 2px 3px; font-size: 10px; text-align: left; word-break: break-word; }
+            .items-table th:nth-child(2), .items-table td:nth-child(2) { text-align: center; width: 12%; }
+            .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 19%; }
+            .items-table th:nth-child(4), .items-table td:nth-child(4) { width: 19%; }
+            .items-table th:nth-child(5), .items-table td:nth-child(5) { width: 24%; }
+            .items-table tfoot td { font-weight: 700; }
+            .footer { margin-top: 8px; text-align: center; font-size: 10px; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h1>Ideal Nimko Ltd.</h1>
-            <p>Order Receipt</p>
-            <div class="shop-name">For: ${
-            lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
-        }</div>
+          <div class="receipt-wrapper">
+            <div class="header">
+              <h1>Ideal Nimko Ltd.</h1>
+            </div>
+            ${receiptContent}
           </div>
-          ${receiptContent}
         </body>
       </html>
     `);
 
         printWindow.document.close();
+        printWindow.focus();
         printWindow.print();
 
         // Record the receipt for admin tracking
@@ -561,12 +590,11 @@ ${
             }`).join('\n')
         }
 
-📍 *Delivery Address:*
-${
-            lastOrder.deliveryAddress
-        }
+${lastOrder.deliveryAddress ? `📍 *Delivery Address:*
+${lastOrder.deliveryAddress}` : ''}
 
-Thank you for your business with Ideal Nimko! 🎉`;
+
+Thank you for your business with Ideal Nimko! `;
 
         const encodedMessage = encodeURIComponent(message);
         const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
@@ -616,10 +644,10 @@ ${
             }`).join('\n')
         }
 
-DELIVERY ADDRESS:
-${
-            lastOrder.deliveryAddress
-        }
+${lastOrder.deliveryAddress ? `DELIVERY ADDRESS:
+${lastOrder.deliveryAddress}
+` : ''}
+
 
 ${
             lastOrder.notes ? `NOTES: ${
@@ -695,10 +723,6 @@ Ideal Nimko Ltd.`;
                             </div>
 
                             <div id="receipt-content">
-                                <div className="header">
-                                    <h1 className="text-2xl font-bold">Ideal Nimko Ltd.</h1>
-                                    <p>Order Receipt</p>
-                                </div>
 
                                 <div className="order-info">
                                     <p>
@@ -707,30 +731,24 @@ Ideal Nimko Ltd.`;
                                         lastOrder._id
                                     }</p>
                                     <p>
-                                        <strong>Order Date:</strong>
-                                        {
-                                        new Date(lastOrder.createdAt).toLocaleString()
-                                    }</p>
-                                    <p>
                                         <strong>Shop Name:</strong>
                                         {
                                         lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'N/A'
-                                    }</p>
-                                    <p>
-                                        <strong>Shopkeeper:</strong>
-                                        {
-                                        lastOrder.shopkeeper ?. name
                                     }</p>
                                     <p>
                                         <strong>Salesman:</strong>
                                         {
                                         lastOrder.placedBySalesman ?. name || lastOrder.salesman ?. name
                                     }</p>
-                                    <p>
-                                        <strong>Delivery Address:</strong>
-                                        {
-                                        lastOrder.deliveryAddress
-                                    }</p>
+                                    {
+                                    lastOrder.deliveryAddress && (
+                                        <p>
+                                            <strong>Delivery Address:</strong>
+                                            {
+                                            lastOrder.deliveryAddress
+                                        }</p>
+                                    )
+                                }
                                     <p>
                                         <strong>Payment Method:</strong>
                                         {
@@ -791,6 +809,7 @@ Ideal Nimko Ltd.`;
                                             <th>Product</th>
                                             <th>Quantity</th>
                                             <th>Unit Price</th>
+                                            <th>Discount</th>
                                             <th>Total</th>
                                         </tr>
                                     </thead>
@@ -806,6 +825,11 @@ Ideal Nimko Ltd.`;
                                                 <td>PKR {
                                                     item.unitPrice ?. toFixed(2) || '0.00'
                                                 }</td>
+                                                <td>
+                                                    {
+                                                    getItemDiscountTotal(item) > 0 ? `PKR ${getItemDiscountTotal(item).toFixed(2)}` : '-'
+                                                }
+                                                </td>
                                                 <td>PKR {
                                                     item.totalPrice ?. toFixed(2) || '0.00'
                                                 }</td>
@@ -813,8 +837,18 @@ Ideal Nimko Ltd.`;
                                         ))
                                     } </tbody>
                                     <tfoot>
+                                        {
+                                        getOrderTotalDiscount(lastOrder) > 0 && (
+                                            <tr>
+                                                <td colSpan="4">Total Discount:</td>
+                                                <td>PKR {
+                                                    getOrderTotalDiscount(lastOrder).toFixed(2)
+                                                }</td>
+                                            </tr>
+                                        )
+                                    }
                                         <tr>
-                                            <td colSpan="3">Order Total:</td>
+                                            <td colSpan="4">Order Total:</td>
                                             <td>PKR {
                                                 lastOrder.totalAmount ?. toFixed(2) || '0.00'
                                             }</td>
@@ -822,7 +856,7 @@ Ideal Nimko Ltd.`;
                                         {
                                         lastOrder.amountPaid > 0 && (
                                             <tr>
-                                                <td colSpan="3">Amount Paid:</td>
+                                                <td colSpan="4">Amount Paid:</td>
                                                 <td className="text-green-600">PKR {
                                                     lastOrder.amountPaid ?. toFixed(2) || '0.00'
                                                 }</td>
@@ -832,7 +866,7 @@ Ideal Nimko Ltd.`;
                                         {
                                         lastOrder.pendingAmount > 0 && (
                                             <tr>
-                                                <td colSpan="3">Pending from this order:</td>
+                                                <td colSpan="4">Pending from this order:</td>
                                                 <td className="text-orange-600">PKR {
                                                     lastOrder.pendingAmount ?. toFixed(2) || '0.00'
                                                 }</td>
@@ -843,9 +877,6 @@ Ideal Nimko Ltd.`;
 
                                 <div className="footer">
                                     <p>Thank you for your business!</p>
-                                    <p>Generated on: {
-                                        new Date().toLocaleString()
-                                    }</p>
                                 </div>
                             </div>
 
@@ -965,16 +996,7 @@ Ideal Nimko Ltd.`;
                                     )
                                 } </div>
                             </div>
-                            {
-                            selectedShopkeeperDetails ?. pendingAmount && selectedShopkeeperDetails.pendingAmount > 0 && (
-                                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                                    <p className="text-sm font-medium text-red-800">
-                                        Current Pending Amount: PKR {
-                                        selectedShopkeeperDetails.pendingAmount.toFixed(2)
-                                    } </p>
-                                </div>
-                            )
-                        } </div>
+                        </div>
 
                         {/* Search and Filter */}
                         <div className="bg-white p-4 rounded-lg shadow mb-6">

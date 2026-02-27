@@ -147,7 +147,19 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
       }
 
       // Use custom price if provided, otherwise use product price
-      const unitPrice = item.customPrice || product.price;
+      const hasCustomPriceValue = item.customPrice !== undefined && item.customPrice !== null && item.customPrice !== '';
+      const requestedCustomPrice = Number(item.customPrice);
+      const hasCustomPrice = hasCustomPriceValue && Number.isFinite(requestedCustomPrice) && requestedCustomPrice >= 0;
+      const unitPrice = hasCustomPrice ? requestedCustomPrice : product.price;
+      const requestedOriginalPrice = Number(item.originalPrice);
+      const originalUnitPrice = Number.isFinite(requestedOriginalPrice) && requestedOriginalPrice > 0
+        ? requestedOriginalPrice
+        : product.price;
+      const discountPerUnit = Math.max(0, originalUnitPrice - unitPrice);
+      const discountTotal = discountPerUnit * item.quantity;
+      const discountPercentage = originalUnitPrice > 0
+        ? Number(((discountPerUnit / originalUnitPrice) * 100).toFixed(2))
+        : 0;
       const totalPrice = unitPrice * item.quantity;
       totalAmount += totalPrice;
 
@@ -155,7 +167,11 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
         product: product._id,
         quantity: item.quantity,
         unitPrice,
-        totalPrice
+        totalPrice,
+        originalUnitPrice,
+        discountPerUnit,
+        discountTotal,
+        discountPercentage
       });
     }
 

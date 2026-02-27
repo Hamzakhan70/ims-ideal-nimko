@@ -43,6 +43,25 @@ const shopkeeperOrderSchema = new mongoose.Schema({
       type: Number,
       required: true,
       min: 0
+    },
+    originalUnitPrice: {
+      type: Number,
+      min: 0
+    },
+    discountPerUnit: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    discountTotal: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   }],
   totalAmount: {
