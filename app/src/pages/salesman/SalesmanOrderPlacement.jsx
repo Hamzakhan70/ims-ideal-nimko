@@ -440,11 +440,11 @@ export default function SalesmanOrderPlacement() {
             if (paymentStatus === 'paid') {
                 showSuccess('Order placed successfully! Full payment received.');
             } else if (paymentStatus === 'partial') {
-                showInfo(`Order placed successfully! Partial payment received. Pending amount: PKR${
+                showInfo(`Order placed successfully! Partial payment received. Pending amount: ${
                     orderPendingAmount.toFixed(2)
                 }`);
             } else {
-                showInfo(`Order placed successfully! Payment pending. Pending amount: PKR${
+                showInfo(`Order placed successfully! Payment pending. Pending amount: ${
                     orderPendingAmount.toFixed(2)
                 }`);
             }
@@ -504,34 +504,46 @@ export default function SalesmanOrderPlacement() {
             lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
         }</title>
           <style>
-            @page { size: 80mm auto; margin: 3mm; }
-            body { font-family: "Courier New", monospace; margin: 0; padding: 0; font-size: 11px; line-height: 1.25; color: #000; }
-            .receipt-wrapper { width: 72mm; margin: 0 auto; }
-            .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 4px; margin-bottom: 6px; }
-            .header h1 { margin: 0; font-size: 14px; letter-spacing: 0.3px; }
-            .order-info { margin-bottom: 8px; }
-            .order-info p { margin: 2px 0; }
-            .items-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }
-            .items-table th, .items-table td { border: 1px solid #000; padding: 2px 3px; font-size: 10px; text-align: left; word-break: break-word; }
-            .items-table th:nth-child(2), .items-table td:nth-child(2) { text-align: center; width: 12%; }
-            .items-table th:nth-child(3), .items-table td:nth-child(3) { width: 19%; }
-            .items-table th:nth-child(4), .items-table td:nth-child(4) { width: 19%; }
-            .items-table th:nth-child(5), .items-table td:nth-child(5) { width: 24%; }
-            .items-table tfoot td { font-weight: 700; }
-            .footer { margin-top: 8px; text-align: center; font-size: 10px; }
+            body { font-family: Arial, sans-serif; margin: 10px; line-height: 1; fontSize:'10px' }
+            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 5px; }
+            .header h1 { margin: 0; font-size: 24px; color: #333; font-family: Arial, sans-serif; font-weight: bold; -webkit-font-smoothing: antialiased; }
+            .header p { margin: 5px 0 0 0; font-size: 16px; color: #666; font-family: Arial, sans-serif; }
+            .order-info { margin-bottom: 5px; background: #f9f9f9; padding: 5px; border-radius: 5px; }
+            .order-info p { margin: 5px 0; fontSize:'10px' }
+            .items-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed;  }
+.items-table th, .items-table td { border: 1px solid #000; padding: 2px; text-align: left;  overflow-wrap: break-word; }
+.items-table th:nth-child(1), .items-table td:nth-child(1) { width: 26%; }
+.items-table th:nth-child(2), .items-table td:nth-child(2) { width: 15%; }
+.items-table th:nth-child(3), .items-table td:nth-child(2) { width: 20%; }
+.items-table th:nth-child(4), .items-table td:nth-child(3) { width: 28%; }
+.items-table th:nth-child(5), .items-table td:nth-child(4) { width: 21%; }
+            .items-table th { background-color: #f0f0f0; font-weight: bold; }
+            .items-table tbody tr:nth-child(even) { background-color: #f9f9f9; }
+            .total { font-weight: bold; font-size: 18px; background-color: #e9e9e9; }
+            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; }
+            .shop-name { font-size: 18px; font-weight: bold; color: #2c5aa0; margin: 10px 0; }
+            @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+                .header { page-break-inside: avoid; }
+                .items-table { page-break-inside: avoid; }
+                .footer { display: block !important; visibility: visible !important; }
+            }
           </style>
         </head>
         <body>
-          <div class="receipt-wrapper">
-            <div class="header">
-              <h1>Ideal Nimko Ltd.</h1>
-            </div>
-            ${receiptContent}
+        ${receiptContent}
+        
           </div>
         </body>
       </html>
     `);
-
+//     <div class="header">
+//     <h1 style={{margin: 0, fontSize: '26px', fontWeight: 'bold', color: '#333', fontFamily: 'Arial, sans-serif', letterSpacing: '0.5px'}}>Ideal Nimko Ltd.</h1>
+//     <p style={{margin: '5px 0 0 0', fontSize: '16px', color: '#666', fontFamily: 'Arial, sans-serif'}}>Order Receipt</p>
+//       <div class="shop-name">For: ${
+//       lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
+//   }</div>
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
@@ -572,7 +584,7 @@ export default function SalesmanOrderPlacement() {
 📋 *Order Details:*
 • Order ID: ${orderId}
 • Date: ${orderDate}
-• Total Amount: PKR${totalAmount}
+• Total Amount: ${totalAmount}
 • Payment Method: ${
             lastOrder.paymentMethod
         }
@@ -583,9 +595,9 @@ ${
                 item.product ?. name || 'Product'
             }: ${
                 item.quantity
-            } x PKR${
+            } x ${
                 item.unitPrice ?. toFixed(2) || '0.00'
-            } = PKR${
+            } = ${
                 item.totalPrice ?. toFixed(2) || '0.00'
             }`).join('\n')
         }
@@ -626,7 +638,7 @@ ORDER RECEIPT
 Order ID: ${orderId}
 Order Date: ${orderDate}
 Shop Name: ${shopName}
-Total Amount: PKR${totalAmount}
+Total Amount: ${totalAmount}
 Payment Method: ${
             lastOrder.paymentMethod
         }
@@ -637,9 +649,9 @@ ${
                 item.product ?. name || 'Product'
             }: ${
                 item.quantity
-            } x PKR${
+            } x ${
                 item.unitPrice ?. toFixed(2) || '0.00'
-            } = PKR${
+            } = ${
                 item.totalPrice ?. toFixed(2) || '0.00'
             }`).join('\n')
         }
@@ -723,38 +735,56 @@ Ideal Nimko Ltd.`;
                             </div>
 
                             <div id="receipt-content">
+                                {/* <div className="header">
+                                    <h1 className="text-2xl font-bold">Ideal Nimko Ltd.</h1>
+                                    <p>Order Receipt</p>
+                                </div> */}
+                                <div className="order-info" style={{textAlign: 'center', paddingBottom: '5px', marginBottom: '5px'}}>
+                                <p style={{fontSize:'14px'}}> <strong>Ideal Nimko Ltd.</strong></p>
+    <p style={{margin: '5px 0 0 0', fontSize: '13px',  fontFamily:  "Times New Roman"}}>Order Receipt</p>
+    <div class="shop-name" style={{fontSize:'14px'}}>For: {
+            lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
+        }</div>
+</div>
 
-                                <div className="order-info">
-                                    <p>
+                                <div className="order-info" >
+                                    <p style={{fontSize:'10px'}}>
                                         <strong>Order ID:</strong>
                                         {
-                                        lastOrder._id
+                                        // lastOrder?._id?.slice(-6)
+                                        `ORD-${lastOrder._id.slice(-6).toUpperCase()}`
                                     }</p>
-                                    <p>
+                                    <p style={{fontSize:'10px'}}>
+                                        <strong>Order Date:</strong>
+                                        {
+                                        new Date(lastOrder.createdAt).toLocaleString()
+                                    }</p>
+                                    <p style={{fontSize:'10px'}}>
                                         <strong>Shop Name:</strong>
                                         {
                                         lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'N/A'
                                     }</p>
-                                    <p>
+                                    {/* <p>
+                                        <strong>Shopkeeper:</strong>
+                                        {
+                                        lastOrder.shopkeeper ?. name
+                                    }</p> */}
+                                    <p style={{fontSize:'10px'}}>
                                         <strong>Salesman:</strong>
                                         {
                                         lastOrder.placedBySalesman ?. name || lastOrder.salesman ?. name
                                     }</p>
-                                    {
-                                    lastOrder.deliveryAddress && (
-                                        <p>
-                                            <strong>Delivery Address:</strong>
-                                            {
-                                            lastOrder.deliveryAddress
-                                        }</p>
-                                    )
-                                }
-                                    <p>
+                                    {/* <p>
+                                        <strong>Delivery Address:</strong>
+                                        {
+                                        lastOrder.deliveryAddress
+                                    }</p> */}
+                                    <p style={{fontSize:'10px'}}>
                                         <strong>Payment Method:</strong>
                                         {
                                         lastOrder.paymentMethod
                                     }</p>
-                                    <p>
+                                    <p style={{fontSize:'10px'}}>
                                         <strong>Payment Status:</strong>
                                         <span className={
                                             `ml-2 px-2 py-1 rounded text-xs font-medium ${
@@ -762,14 +792,14 @@ Ideal Nimko Ltd.`;
                                             }`
                                         }>
                                             {
-                                            lastOrder.paymentStatus === 'paid' ? '✅ Fully Paid' : lastOrder.paymentStatus === 'partial' ? '💰 Partially Paid' : '⏳ Pending'
+                                            lastOrder.paymentStatus === 'paid' ? 'Fully Paid' : lastOrder.paymentStatus === 'partial' ? 'Partially Paid' : 'Pending'
                                         } </span>
                                     </p>
-                                    {
+                                    {/* {
                                     lastOrder.amountPaid > 0 && (
                                         <p>
                                             <strong>Amount Paid:</strong>
-                                            <span className="text-green-600">PKR {
+                                            <span className="text-green-600"> {
                                                 lastOrder.amountPaid ?. toFixed(2) || '0.00'
                                             }</span>
                                         </p>
@@ -779,35 +809,38 @@ Ideal Nimko Ltd.`;
                                     lastOrder.pendingAmount > 0 && (
                                         <p>
                                             <strong>Order Pending Amount:</strong>
-                                            <span className="text-orange-600">PKR {
+                                            <span className="text-orange-600"> {
                                                 lastOrder.pendingAmount ?. toFixed(2) || '0.00'
                                             }</span>
                                         </p>
                                     )
-                                }
+                                } */}
                                     {
                                     lastOrder.shopkeeper ?. pendingAmount > 0 && (
-                                        <p>
-                                            <strong>Shopkeeper Total Pending Amount:</strong>
-                                            <span className="text-red-600 font-semibold">PKR {
-                                                lastOrder.shopkeeper ?. pendingAmount ?. toFixed(2) || '0.00'
+                                        <p style={{fontSize:'10px'}}>
+                                            <strong>Total Pending Amount:</strong>
+                                            <span className="text-red-600 font-semibold"> {
+                                                lastOrder.shopkeeper ?. pendingAmount  || '0'
                                             }</span>
                                         </p>
                                     )
                                 }
                                     {
-                                    lastOrder.notes && <p>
+                                    lastOrder.notes && <p style={{fontSize:'10px'}}>
                                         <strong>Notes:</strong>
                                         {
                                         lastOrder.notes
                                     }</p>
                                 } </div>
 
-                                <table className="items-table">
+                                {/* <table className="items-table"> */}
+                                <div style={{overflowX: 'auto', width: '100%'}}>
+<table className="items-table" style={{width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed',fontSize:'9px'}}>
                                     <thead>
                                         <tr>
                                             <th>Product</th>
-                                            <th>Quantity</th>
+                                            
+                                            <th>Qty</th>
                                             <th>Unit Price</th>
                                             <th>Discount</th>
                                             <th>Total</th>
@@ -819,19 +852,18 @@ Ideal Nimko Ltd.`;
                                                 <td>{
                                                     item.product ?. name || 'Product'
                                                 }</td>
+                                                
                                                 <td>{
                                                     item.quantity
                                                 }</td>
-                                                <td>PKR {
-                                                    item.unitPrice ?. toFixed(2) || '0.00'
+                                                <td> {
+                                                    item.unitPrice  || '0'
                                                 }</td>
-                                                <td>
-                                                    {
-                                                    getItemDiscountTotal(item) > 0 ? `PKR ${getItemDiscountTotal(item).toFixed(2)}` : '-'
-                                                }
-                                                </td>
-                                                <td>PKR {
-                                                    item.totalPrice ?. toFixed(2) || '0.00'
+                                                 <td> {
+                                                    item?.discount  || '0'
+                                                }</td>
+                                                <td> {
+                                                    item.totalPrice  || '0'
                                                 }</td>
                                             </tr>
                                         ))
@@ -848,17 +880,17 @@ Ideal Nimko Ltd.`;
                                         )
                                     }
                                         <tr>
-                                            <td colSpan="4">Order Total:</td>
-                                            <td>PKR {
-                                                lastOrder.totalAmount ?. toFixed(2) || '0.00'
+                                            <td colSpan="3">Order Total:</td>
+                                            <td colSpan="2"> {
+                                                lastOrder.totalAmount  || '0'
                                             }</td>
                                         </tr>
                                         {
                                         lastOrder.amountPaid > 0 && (
                                             <tr>
-                                                <td colSpan="4">Amount Paid:</td>
-                                                <td className="text-green-600">PKR {
-                                                    lastOrder.amountPaid ?. toFixed(2) || '0.00'
+                                                <td colSpan="3">Amount Paid:</td>
+                                                <td colSpan="2" className="text-green-600"> {
+                                                    lastOrder.amountPaid  || '0'
                                                 }</td>
                                             </tr>
                                         )
@@ -866,18 +898,19 @@ Ideal Nimko Ltd.`;
                                         {
                                         lastOrder.pendingAmount > 0 && (
                                             <tr>
-                                                <td colSpan="4">Pending from this order:</td>
-                                                <td className="text-orange-600">PKR {
-                                                    lastOrder.pendingAmount ?. toFixed(2) || '0.00'
+                                                <td colSpan="3">Pending in this order:</td>
+                                                <td colSpan="2"  className="text-orange-600"> {
+                                                    lastOrder.pendingAmount || '0'
                                                 }</td>
                                             </tr>
                                         )
                                     } </tfoot>
                                 </table>
-
-                                <div className="footer">
-                                    <p>Thank you for your business!</p>
                                 </div>
+                                <div className="order-info" style={{marginTop: '0px', textAlign: 'center', fontSize: '10px', fontFamily: 'Times New Roman',  paddingTop: '0px'}}>
+    <p style={{margin: '4px 0'}}>Thank you for your business!</p>
+    <p style={{margin: '4px 0'}}>Generated on: {new Date().toLocaleString()}</p>
+</div>
                             </div>
 
                             <div className="flex flex-wrap justify-end gap-3 mt-6">
@@ -996,7 +1029,16 @@ Ideal Nimko Ltd.`;
                                     )
                                 } </div>
                             </div>
-                        </div>
+                            {
+                            selectedShopkeeperDetails ?. pendingAmount && selectedShopkeeperDetails.pendingAmount > 0 && (
+                                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                    <p className="text-sm font-medium text-red-800">
+                                        Current Pending Amount:  {
+                                        selectedShopkeeperDetails.pendingAmount.toFixed(2)
+                                    } </p>
+                                </div>
+                            )
+                        } </div>
 
                         {/* Search and Filter */}
                         <div className="bg-white p-4 rounded-lg shadow mb-6">
@@ -1090,7 +1132,7 @@ Ideal Nimko Ltd.`;
                                                 product.description
                                             }</p>
                                             <div className="flex justify-between items-center mb-3">
-                                                <span className="text-xl font-bold text-yellow-600">PKR {
+                                                <span className="text-xl font-bold text-yellow-600"> {
                                                     product.price
                                                 }</span>
                                                 <div className="text-right text-sm text-gray-500">
@@ -1210,7 +1252,7 @@ Ideal Nimko Ltd.`;
                                                             } packets/bundle` : 'Packets per bundle: N/A'
                                                         } </p>
                                                         <div className="flex items-center space-x-2">
-                                                            <span className="text-sm text-gray-500">Original: PKR {
+                                                            <span className="text-sm text-gray-500">Original:  {
                                                                 item.originalPrice
                                                             }</span>
                                                             {
@@ -1233,7 +1275,7 @@ Ideal Nimko Ltd.`;
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                            Custom Price (PKR)
+                                                            Custom Price ()
                                                         </label>
                                                         <input type="number"
                                                             value={
@@ -1256,7 +1298,7 @@ Ideal Nimko Ltd.`;
 
                                                 <div>
                                                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                                                        Discount Amount (PKR)
+                                                        Discount Amount ()
                                                     </label>
                                                     <input type="number" min="0"
                                                         max={
@@ -1317,13 +1359,13 @@ Ideal Nimko Ltd.`;
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-sm font-semibold text-gray-900">
-                                                        PKR {
+                                                         {
                                                         ((item.customPrice === '' ? item.originalPrice : item.customPrice) * item.quantity).toFixed(2)
                                                     } </p>
                                                     {
                                                     isDiscounted && (
                                                         <p className="text-xs text-green-600">
-                                                            Saved: PKR {
+                                                            Saved:  {
                                                             ((item.originalPrice -(item.customPrice === '' ? item.originalPrice : item.customPrice)) * item.quantity).toFixed(2)
                                                         } </p>
                                                     )
@@ -1355,13 +1397,13 @@ Ideal Nimko Ltd.`;
                                                         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                                                             <div className="flex justify-between text-sm">
                                                                 <span className="text-green-800">Original Total:</span>
-                                                                <span className="text-green-800">PKR {
+                                                                <span className="text-green-800"> {
                                                                     totalOriginalAmount.toFixed(2)
                                                                 }</span>
                                                             </div>
                                                             <div className="flex justify-between text-sm">
                                                                 <span className="text-green-800">Total Savings:</span>
-                                                                <span className="text-green-800 font-semibold">PKR {
+                                                                <span className="text-green-800 font-semibold"> {
                                                                     totalSavings.toFixed(2)
                                                                 }</span>
                                                             </div>
@@ -1370,7 +1412,7 @@ Ideal Nimko Ltd.`;
                                                 }
                                                     <div className="flex justify-between text-lg font-semibold">
                                                         <span>Final Total:</span>
-                                                        <span>PKR {
+                                                        <span> {
                                                             totalCustomAmount.toFixed(2)
                                                         }</span>
                                                     </div>
@@ -1392,20 +1434,20 @@ Ideal Nimko Ltd.`;
                                         <div className="space-y-1 text-sm">
                                             <div className="flex justify-between">
                                                 <span className="text-gray-700">Current Pending:</span>
-                                                <span className="text-red-600 font-semibold">PKR {
+                                                <span className="text-red-600 font-semibold"> {
                                                     (selectedShopkeeperDetails ?. pendingAmount || 0).toFixed(2)
                                                 }</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-gray-700">Order Total:</span>
-                                                <span className="font-semibold">PKR {
+                                                <span className="font-semibold"> {
                                                     getTotalAmount().toFixed(2)
                                                 }</span>
                                             </div>
                                             <div className="border-t border-blue-200 pt-1 mt-1">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-700">Amount to Pay Now:</span>
-                                                    <span className="text-green-700 font-semibold">PKR {
+                                                    <span className="text-green-700 font-semibold"> {
                                                         (parseFloat(orderForm.amountPaid) || 0).toFixed(2)
                                                     }</span>
                                                 </div>
@@ -1414,7 +1456,7 @@ Ideal Nimko Ltd.`;
                                                 <div className="flex justify-between">
                                                     <span className="font-semibold text-blue-900">New Pending Amount:</span>
                                                     <span className="font-bold text-red-700">
-                                                        PKR {
+                                                         {
                                                         ((selectedShopkeeperDetails ?. pendingAmount || 0) + getTotalAmount() - (parseFloat(orderForm.amountPaid) || 0)).toFixed(2)
                                                     } </span>
                                                 </div>
@@ -1424,7 +1466,7 @@ Ideal Nimko Ltd.`;
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Amount Paid Now (PKR)
+                                            Amount Paid Now ()
                                         </label>
                                         <input type="number" required min="0" step="0.01"
                                             value={
@@ -1446,11 +1488,11 @@ Ideal Nimko Ltd.`;
                                                         <span className="text-green-600">Excess payment:
                                                         </span>
                                                         <span className="font-semibold text-green-600">
-                                                            PKR {
+                                                             {
                                                             (parseFloat(orderForm.amountPaid) - getTotalAmount()).toFixed(2)
                                                         } </span>
                                                         <p className="text-xs text-green-700 mt-1">
-                                                            This will reduce the pending amount by PKR {
+                                                            This will reduce the pending amount by  {
                                                             (parseFloat(orderForm.amountPaid) - getTotalAmount()).toFixed(2)
                                                         } </p>
                                                     </>
@@ -1459,7 +1501,7 @@ Ideal Nimko Ltd.`;
                                                         <span className="text-gray-600">Remaining to pay:
                                                         </span>
                                                         <span className="font-semibold text-orange-600">
-                                                            PKR {
+                                                             {
                                                             (getTotalAmount() - parseFloat(orderForm.amountPaid)).toFixed(2)
                                                         } </span>
                                                     </>
