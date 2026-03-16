@@ -299,6 +299,21 @@ export default function SalesmanOrderPlacement() {
         return Number(order.items.reduce((sum, item) => sum + getItemDiscountTotal(item), 0).toFixed(2));
     };
 
+    const formatReceiptAmount = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return '0';
+        }
+        return Math.round(num).toString();
+    };
+
+    const getDisplayOrderId = (order) => {
+        if (!order?._id) {
+            return 'N/A';
+        }
+        return `ORD-${order._id.slice(-6).toUpperCase()}`;
+    };
+
     const handleCityChange = async (cityId) => {
         setSelectedCity(cityId);
         // Reset shopkeeper selection when city changes
@@ -594,7 +609,7 @@ export default function SalesmanOrderPlacement() {
 
 
         const shopName = lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop';
-        const orderId = lastOrder._id;
+        const orderId = getDisplayOrderId(lastOrder);
         const totalAmount = lastOrder.totalAmount ?. toFixed(2) || '0.00';
         const orderDate = new Date(lastOrder.createdAt).toLocaleString();
 
@@ -639,7 +654,7 @@ Thank you for your business with Ideal Nimko! `;
 
 
         const shopName = lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop';
-        const orderId = lastOrder._id;
+        const orderId = getDisplayOrderId(lastOrder);
         const totalAmount = lastOrder.totalAmount ?. toFixed(2) || '0.00';
         const orderDate = new Date(lastOrder.createdAt).toLocaleString();
 
@@ -771,7 +786,7 @@ Ideal Nimko Ltd.`;
                                         <strong>Order ID:</strong>
                                         {
                                         // lastOrder?._id?.slice(-6)
-                                        `ORD-${lastOrder._id.slice(-6).toUpperCase()}`
+                                        getDisplayOrderId(lastOrder)
                                     }</p>
                                     <p style={{fontSize:'10px'}}>
                                         <strong>Order Date:</strong>
@@ -839,7 +854,7 @@ Ideal Nimko Ltd.`;
                                         <p style={{fontSize:'10px'}}>
                                             <strong>Total Pending Amount:</strong>
                                             <span className="text-red-600 font-semibold"> {
-                                                lastOrder.shopkeeper ?. pendingAmount  || '0'
+                                                formatReceiptAmount(lastOrder.shopkeeper ?. pendingAmount)
                                             }</span>
                                         </p>
                                     )
@@ -882,7 +897,7 @@ Ideal Nimko Ltd.`;
                                                     getItemDiscountTotal(item) > 0 ? getItemDiscountTotal(item).toFixed(2) : '0'
                                                 }</td>
                                                 <td> {
-                                                    Math.max(0, (Number(item.totalPrice) || 0) - getItemDiscountTotal(item)).toFixed(2)
+                                                    Number(item.totalPrice || 0).toFixed(2)
                                                 }</td>
                                             </tr>
                                         ))
@@ -891,7 +906,7 @@ Ideal Nimko Ltd.`;
                                         <tr>
                                             <td colSpan="3">Order Total:</td>
                                             <td colSpan="2"> {
-                                                Math.max(0, (Number(lastOrder.totalAmount) || 0) - getOrderTotalDiscount(lastOrder)).toFixed(2)
+                                                Number(lastOrder.totalAmount || 0).toFixed(2)
                                             }</td>
                                         </tr>
                                         {
@@ -899,7 +914,7 @@ Ideal Nimko Ltd.`;
                                             <tr>
                                                 <td colSpan="3">Amount Paid:</td>
                                                 <td colSpan="2" className="text-green-600"> {
-                                                    lastOrder.amountPaid  || '0'
+                                                    formatReceiptAmount(lastOrder.amountPaid)
                                                 }</td>
                                             </tr>
                                         )
@@ -909,7 +924,7 @@ Ideal Nimko Ltd.`;
                                             <tr>
                                                 <td colSpan="3">Pending in this order:</td>
                                                 <td colSpan="2"  className="text-orange-600"> {
-                                                    lastOrder.pendingAmount || '0'
+                                                    formatReceiptAmount(lastOrder.pendingAmount)
                                                 }</td>
                                             </tr>
                                         )
@@ -1084,8 +1099,11 @@ Ideal Nimko Ltd.`;
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                             {
                             paginatedProducts.map((product) => {
-                                const isLowStock = product.stock < 5;
-                                const isOutOfStock = product.stock <= 0;
+                                const cartItem = cart.find(item => item.productId === product._id);
+                                const reservedQuantity = cartItem?.quantity || 0;
+                                const availableStock = Math.max(0, (product.stock || 0) - reservedQuantity);
+                                const isLowStock = availableStock > 0 && availableStock < 5;
+                                const isOutOfStock = availableStock <= 0;
 
                                 return (
                                     <div key={
@@ -1105,7 +1123,7 @@ Ideal Nimko Ltd.`;
                                                 alt={
                                                     product.name
                                                 }
-                                                className="w-full h-48 object-cover"/> {/* Low Stock Warning Overlay */}
+                                                className="w-full h-28 sm:h-48 object-contain " /> {/* Low Stock Warning Overlay */}
                                             {
                                             isLowStock && ! isOutOfStock && (
                                                 <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-semibold animate-pulse">
@@ -1123,9 +1141,9 @@ Ideal Nimko Ltd.`;
                                                 </div>
                                             )
                                         } </div>
-                                        <div className="p-4">
+                                        <div className="p-3 sm:p-4">
                                             <div className="flex justify-between items-start mb-2">
-                                                <h3 className="text-lg font-semibold text-gray-900">
+                                                <h3 className="text-base sm:text-lg font-semibold text-gray-900">
                                                     {
                                                     product.name
                                                 }</h3>
@@ -1136,22 +1154,22 @@ Ideal Nimko Ltd.`;
                                                     </span>
                                                 )
                                             } </div>
-                                            <p className="text-gray-600 text-sm mb-2 line-clamp-2">
+                                            <p className="text-gray-600 text-xs sm:text-sm mb-2 line-clamp-2">
                                                 {
                                                 product.description
                                             }</p>
                                             <div className="flex justify-between items-center mb-3">
-                                                <span className="text-xl font-bold text-yellow-600"> {
+                                                <span className="text-lg sm:text-xl font-bold text-yellow-600"> {
                                                     product.price
                                                 }</span>
-                                                <div className="text-right text-sm text-gray-500">
-                                                    <div className={
+                                                <div className="text-right text-xs sm:text-sm text-gray-500">
+                                                <div className={
                                                         `${
                                                             isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'
                                                         }`
                                                     }>
                                                         Stock: {
-                                                        product.stock
+                                                        availableStock
                                                     }
                                                         {
                                                         isLowStock && ! isOutOfStock && (
@@ -1166,15 +1184,15 @@ Ideal Nimko Ltd.`;
                                                     ) : null
                                                 } </div>
                                             </div>
-                                            <button onClick={
+                                                <button onClick={
                                                     () => addToCart(product)
                                                 }
                                                 disabled={
-                                                    isOutOfStock || product.stock <= 0
+                                                    isOutOfStock
                                                 }
                                                 className={
-                                                    `w-full px-4 py-2 rounded-lg transition-all duration-300 ${
-                                                        isOutOfStock || product.stock <= 0 ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : isLowStock ? 'bg-red-500 text-white hover:bg-red-600 hover:scale-105 transform' : 'bg-yellow-500 text-white hover:bg-yellow-600 hover:scale-105 transform'
+                                                    `w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-all duration-300 ${
+                                                        isOutOfStock ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : isLowStock ? 'bg-red-500 text-white hover:bg-red-600 hover:scale-105 transform' : 'bg-yellow-500 text-white hover:bg-yellow-600 hover:scale-105 transform'
                                                     }`
                                             }>
                                                 {
@@ -1248,7 +1266,7 @@ Ideal Nimko Ltd.`;
                                                         alt={
                                                             item.name
                                                         }
-                                                        className="w-12 h-12 object-cover rounded"/>
+                                                        className="w-12 h-12 object-contain rounded"/>
                                                     <div className="flex-1">
                                                         <h4 className="text-sm font-medium text-gray-900">
                                                             {
