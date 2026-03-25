@@ -1116,88 +1116,89 @@ Ideal Nimko Ltd.`;
                                                 isOutOfStock ? 'opacity-75' : ''
                                             }`
                                     }>
-                                        <div className="relative">
-                                            <img src={
-                                                    product.imageURL
-                                                }
-                                                alt={
-                                                    product.name
-                                                }
-                                                className="w-full h-28 sm:h-48 object-contain " /> {/* Low Stock Warning Overlay */}
-                                            {
-                                            isLowStock && ! isOutOfStock && (
-                                                <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-semibold animate-pulse">
-                                                    Low Stock!
-                                                </div>
-                                            )
-                                        }
-                                            {/* Out of Stock Overlay */}
-                                            {
-                                            isOutOfStock && (
-                                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                                    <div className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">
-                                                        Out of Stock
-                                                    </div>
-                                                </div>
-                                            )
-                                        } </div>
-                                        <div className="p-3 sm:p-4">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <h3 className="text-base sm:text-lg font-semibold text-gray-900">
-                                                    {
-                                                    product.name
-                                                }</h3>
+                                        <div className="flex sm:block">
+                                            <div className="relative w-28 shrink-0 border-r border-gray-100 bg-white sm:w-auto sm:border-r-0">
+                                                <img src={
+                                                        product.imageURL
+                                                    }
+                                                    alt={
+                                                        product.name
+                                                    }
+                                                    className="w-full h-full min-h-[120px] object-contain p-2 sm:h-48 sm:min-h-0 sm:p-0" />
                                                 {
                                                 isLowStock && ! isOutOfStock && (
-                                                    <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
-                                                        Limited Stock
-                                                    </span>
+                                                    <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded-full text-[10px] sm:text-xs font-semibold animate-pulse">
+                                                        Low Stock!
+                                                    </div>
+                                                )
+                                            }
+                                                {
+                                                isOutOfStock && (
+                                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                                        <div className="bg-red-600 text-white px-2 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold">
+                                                            Out of Stock
+                                                        </div>
+                                                    </div>
                                                 )
                                             } </div>
-                                            <p className="text-gray-600 text-xs sm:text-sm mb-2 line-clamp-2">
-                                                {
-                                                product.description
-                                            }</p>
-                                            <div className="flex justify-between items-center mb-3">
-                                                <span className="text-lg sm:text-xl font-bold text-yellow-600"> {
-                                                    product.price
-                                                }</span>
-                                                <div className="text-right text-xs sm:text-sm text-gray-500">
-                                                <div className={
-                                                        `${
-                                                            isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'
-                                                        }`
-                                                    }>
-                                                        Stock: {
-                                                        availableStock
-                                                    }
+                                            <div className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-4">
+                                                <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-2">
+                                                    <h3 className="text-sm sm:text-lg font-semibold text-gray-900 leading-tight line-clamp-2">
                                                         {
-                                                        isLowStock && ! isOutOfStock && (
-                                                            <span className="ml-1 text-red-600">⚠️</span>
-                                                        )
-                                                    } </div>
+                                                        product.name
+                                                    }</h3>
                                                     {
-                                                    product.packets ? (
-                                                        <div>Packets/bundle: {
-                                                            product.packets
-                                                        }</div>
-                                                    ) : null
+                                                    isLowStock && ! isOutOfStock && (
+                                                        <span className="hidden sm:inline-flex bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                                            Limited Stock
+                                                        </span>
+                                                    )
                                                 } </div>
+                                                <p className="hidden sm:block text-gray-600 text-sm mb-2 line-clamp-2">
+                                                    {
+                                                    product.description
+                                                }</p>
+                                                <div className="flex items-end justify-between gap-2 mb-2 sm:mb-3 mt-auto">
+                                                    <span className="text-2xl sm:text-xl font-bold text-yellow-600 leading-none"> {
+                                                        product.price
+                                                    }</span>
+                                                    <div className="text-right text-[11px] sm:text-sm leading-tight text-gray-500">
+                                                    <div className={
+                                                            `${
+                                                                isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'
+                                                            }`
+                                                        }>
+                                                            Stock: {
+                                                            availableStock
+                                                        }
+                                                            {
+                                                            isLowStock && ! isOutOfStock && (
+                                                                <span className="ml-1 text-red-600">!</span>
+                                                            )
+                                                        } </div>
+                                                        {
+                                                        product.packets ? (
+                                                            <div>Packets/bundle: {
+                                                                product.packets
+                                                            }</div>
+                                                        ) : null
+                                                    } </div>
+                                                </div>
+                                                    <button onClick={
+                                                        () => addToCart(product)
+                                                    }
+                                                    disabled={
+                                                        isOutOfStock
+                                                    }
+                                                    className={
+                                                        `w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base transition-all duration-300 ${
+                                                            isOutOfStock ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : isLowStock ? 'bg-red-500 text-white hover:bg-red-600 hover:scale-105 transform' : 'bg-yellow-500 text-white hover:bg-yellow-600 hover:scale-105 transform'
+                                                        }`
+                                                }>
+                                                    {
+                                                    isOutOfStock || product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'
+                                                } </button>
                                             </div>
-                                                <button onClick={
-                                                    () => addToCart(product)
-                                                }
-                                                disabled={
-                                                    isOutOfStock
-                                                }
-                                                className={
-                                                    `w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-all duration-300 ${
-                                                        isOutOfStock ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : isLowStock ? 'bg-red-500 text-white hover:bg-red-600 hover:scale-105 transform' : 'bg-yellow-500 text-white hover:bg-yellow-600 hover:scale-105 transform'
-                                                    }`
-                                            }>
-                                                {
-                                                isOutOfStock || product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'
-                                            } </button>
                                         </div>
                                     </div>
                                 );
