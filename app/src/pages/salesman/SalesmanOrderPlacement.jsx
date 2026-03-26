@@ -1,5 +1,5 @@
 import axios from 'axios';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Pagination from '../../components/common/Pagination';
 import { useToast } from '../../context/ToastContext';
 import { api } from '../../utils/api';
@@ -23,6 +23,7 @@ export default function SalesmanOrderPlacement() {
     const [showReceipt, setShowReceipt] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(12);
+    const cartSectionRef = useRef(null);
 
     useEffect(() => {
         fetchData();
@@ -207,6 +208,13 @@ export default function SalesmanOrderPlacement() {
         setCart(cart.filter(item => item.productId !== productId));
     };
 
+    const scrollToCart = () => {
+        cartSectionRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+        });
+    };
+
     const updateCustomPrice = (productId, customPrice) => {
         setCart(cart.map(item => {
             if (item.productId !== productId) {
@@ -312,6 +320,66 @@ export default function SalesmanOrderPlacement() {
             return 'N/A';
         }
         return `ORD-${order._id.slice(-6).toUpperCase()}`;
+    };
+
+    const getPaymentStatusLabel = (paymentStatus) => {
+        if (paymentStatus === 'paid') {
+            return 'Fully Paid';
+        }
+        if (paymentStatus === 'partial') {
+            return 'Partially Paid';
+        }
+        return 'Pending';
+    };
+
+    const buildShareReceiptText = (order) => {
+        if (!order) {
+            return '';
+        }
+
+        const shopName = order.shopkeeper?.shopName || order.shopkeeper?.name || 'Shop';
+        const salesmanName = order.placedBySalesman?.name || order.salesman?.name || 'N/A';
+        const lines = [
+            'Ideal Nimko Ltd.',
+            'Order Receipt',
+            `For: ${shopName}`,
+            '',
+            `Order ID: ${getDisplayOrderId(order)}`,
+            `Order Date: ${new Date(order.createdAt).toLocaleString()}`,
+            `Shop Name: ${shopName}`,
+            `Salesman: ${salesmanName}`,
+            `Payment Method: ${order.paymentMethod || 'N/A'}`,
+            `Payment Status: ${getPaymentStatusLabel(order.paymentStatus)}`
+        ];
+
+        if ((order.shopkeeper?.pendingAmount || 0) > 0) {
+            lines.push(`Total Pending Amount: ${formatReceiptAmount(order.shopkeeper?.pendingAmount)}`);
+        }
+
+        if (order.notes) {
+            lines.push(`Notes: ${order.notes}`);
+        }
+
+        lines.push('', 'Items:');
+        lines.push('Product | Qty | Unit Price | Discount | Total');
+
+        order.items?.forEach((item) => {
+            lines.push(`${item.product?.name || 'Product'} | ${item.quantity} | ${item.unitPrice || '0'} | ${getItemDiscountTotal(item) > 0 ? getItemDiscountTotal(item).toFixed(2) : '0'} | ${Number(item.totalPrice || 0).toFixed(2)}`);
+        });
+
+        lines.push('', `Order Total: ${Number(order.totalAmount || 0).toFixed(2)}`);
+
+        if ((order.amountPaid || 0) > 0) {
+            lines.push(`Amount Paid: ${formatReceiptAmount(order.amountPaid)}`);
+        }
+
+        if ((order.pendingAmount || 0) > 0) {
+            lines.push(`Pending in this order: ${formatReceiptAmount(order.pendingAmount)}`);
+        }
+
+        lines.push('', 'Thank you for your business!', `Generated on: ${new Date().toLocaleString()}`);
+
+        return lines.join('\n');
     };
 
     const handleCityChange = async (cityId) => {
@@ -607,40 +675,7 @@ export default function SalesmanOrderPlacement() {
             return;
         
 
-
-        const shopName = lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop';
-        const orderId = getDisplayOrderId(lastOrder);
-        const totalAmount = lastOrder.totalAmount ?. toFixed(2) || '0.00';
-        const orderDate = new Date(lastOrder.createdAt).toLocaleString();
-
-        const message = `🏪 *Order Receipt for ${shopName}*
-
-📋 *Order Details:*
-• Order ID: ${orderId}
-• Date: ${orderDate}
-• Total Amount: ${totalAmount}
-• Payment Method: ${
-            lastOrder.paymentMethod
-        }
-
-📦 *Items Ordered:*
-${
-            lastOrder.items.map(item => `• ${
-                item.product ?. name || 'Product'
-            }: ${
-                item.quantity
-            } x ${
-                item.unitPrice ?. toFixed(2) || '0.00'
-            } = ${
-                item.totalPrice ?. toFixed(2) || '0.00'
-            }`).join('\n')
-        }
-
-${lastOrder.deliveryAddress ? `📍 *Delivery Address:*
-${lastOrder.deliveryAddress}` : ''}
-
-
-Thank you for your business with Ideal Nimko! `;
+        const message = buildShareReceiptText(lastOrder);
 
         const encodedMessage = encodeURIComponent(message);
         const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
@@ -655,57 +690,9 @@ Thank you for your business with Ideal Nimko! `;
 
         const shopName = lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop';
         const orderId = getDisplayOrderId(lastOrder);
-        const totalAmount = lastOrder.totalAmount ?. toFixed(2) || '0.00';
-        const orderDate = new Date(lastOrder.createdAt).toLocaleString();
 
         const subject = `Order Receipt - ${shopName} - Order #${orderId}`;
-
-        const body = `Dear ${
-            lastOrder.shopkeeper ?. name || 'Valued Customer'
-        },
-
-Please find below the details of your order:
-
-ORDER RECEIPT
-=============
-
-Order ID: ${orderId}
-Order Date: ${orderDate}
-Shop Name: ${shopName}
-Total Amount: ${totalAmount}
-Payment Method: ${
-            lastOrder.paymentMethod
-        }
-
-ITEMS ORDERED:
-${
-            lastOrder.items.map(item => `• ${
-                item.product ?. name || 'Product'
-            }: ${
-                item.quantity
-            } x ${
-                item.unitPrice ?. toFixed(2) || '0.00'
-            } = ${
-                item.totalPrice ?. toFixed(2) || '0.00'
-            }`).join('\n')
-        }
-
-${lastOrder.deliveryAddress ? `DELIVERY ADDRESS:
-${lastOrder.deliveryAddress}
-` : ''}
-
-
-${
-            lastOrder.notes ? `NOTES: ${
-                lastOrder.notes
-            }` : ''
-        }
-
-Thank you for your business with Ideal Nimko!
-
-Best regards,
-Sales Team
-Ideal Nimko Ltd.`;
+        const body = buildShareReceiptText(lastOrder);
 
         const encodedSubject = encodeURIComponent(subject);
         const encodedBody = encodeURIComponent(body);
@@ -826,7 +813,7 @@ Ideal Nimko Ltd.`;
                                             }`
                                         }>
                                             {
-                                            lastOrder.paymentStatus === 'paid' ? 'Fully Paid' : lastOrder.paymentStatus === 'partial' ? 'Partially Paid' : 'Pending'
+                                            getPaymentStatusLabel(lastOrder.paymentStatus)
                                         } </span>
                                     </p>
                                     {/* {
@@ -1163,7 +1150,7 @@ Ideal Nimko Ltd.`;
                                                     <span className="text-lg sm:text-xl font-bold text-yellow-600 leading-none"> {
                                                         product.price
                                                     }</span>
-                                                    <div className="text-right text-[10px] sm:text-sm leading-tight text-gray-500">
+                                                    <div className="text-right text-[15px] sm:text-sm leading-tight text-black">
                                                     <div className={
                                                             `${
                                                                 isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'
@@ -1253,7 +1240,8 @@ Ideal Nimko Ltd.`;
                     } </div>
 
                     {/* Cart Section */}
-                    <div className="lg:col-span-1">
+                    <div ref={cartSectionRef}
+                        className="lg:col-span-1">
                         <div className="bg-white rounded-lg shadow p-4 sm:p-6 sticky top-4">
                             <h2 className="text-xl font-semibold text-gray-900 mb-4">Order Cart</h2>
 
@@ -1499,7 +1487,7 @@ Ideal Nimko Ltd.`;
                                                     <span className="font-semibold text-blue-900">New Pending Amount:</span>
                                                     <span className="font-bold text-red-700">
                                                          {
-                                                        ((selectedShopkeeperDetails ?. pendingAmount || 0) + getTotalAmount() - (parseFloat(orderForm.amountPaid) || 0)).toFixed(2)
+                                                        Math.max(0, (selectedShopkeeperDetails ?. pendingAmount || 0) + getTotalAmount() - (parseFloat(orderForm.amountPaid) || 0)).toFixed(2)
                                                     } </span>
                                                 </div>
                                             </div>
@@ -1604,6 +1592,17 @@ Ideal Nimko Ltd.`;
                     </div>
                 </div>
             </div>
+            {
+            cart.length > 0 && (
+                <button type="button"
+                    onClick={scrollToCart}
+                    className="fixed bottom-5 right-4 sm:bottom-6 sm:right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-yellow-500 text-white shadow-lg transition hover:bg-yellow-600"
+                    aria-label="Go to cart"
+                    title="Go to cart">
+                    <span className="text-xl leading-none">↓</span>
+                </button>
+            )
+        }
         </div>
     );
 }

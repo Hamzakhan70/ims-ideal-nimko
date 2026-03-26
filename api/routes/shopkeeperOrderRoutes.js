@@ -179,9 +179,14 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
     const commissionRate = salesman.commissionRate || 5;
     const commission = (totalAmount * commissionRate) / 100;
 
-    // Calculate amount paid and pending amount
+    const currentPendingAmount = shopkeeper.pendingAmount || 0;
+
+    // Allow overpayment the same way recovery does:
+    // clear the current order first, then reduce any older pending balance.
     const paidAmount = parseFloat(amountPaid) || 0;
-    const orderPendingAmount = totalAmount - paidAmount;
+    const orderPendingAmount = Math.max(0, totalAmount - paidAmount);
+    const excessPayment = Math.max(0, paidAmount - totalAmount);
+    const newPendingAmount = Math.max(0, currentPendingAmount + orderPendingAmount - excessPayment);
     
     // Determine payment status based on payment
     let paymentStatus = 'pending';
@@ -209,10 +214,7 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
 
     await order.save();
 
-    // Update shopkeeper's pending amount with the new pending amount from this order
-    const currentPendingAmount = shopkeeper.pendingAmount || 0;
-    const newPendingAmount = currentPendingAmount + orderPendingAmount;
-    
+    // Update shopkeeper's total pending after applying any excess payment.
     await User.findByIdAndUpdate(shopkeeper._id, {
       pendingAmount: newPendingAmount
     });
