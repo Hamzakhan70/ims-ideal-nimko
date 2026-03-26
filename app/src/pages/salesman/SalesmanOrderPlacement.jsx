@@ -1100,6 +1100,7 @@ Ideal Nimko Ltd.`;
                             {
                             paginatedProducts.map((product) => {
                                 const cartItem = cart.find(item => item.productId === product._id);
+                                const currentQuantity = cartItem?.quantity || 0;
                                 const reservedQuantity = cartItem?.quantity || 0;
                                 const availableStock = Math.max(0, (product.stock || 0) - reservedQuantity);
                                 const isLowStock = availableStock > 0 && availableStock < 5;
@@ -1117,14 +1118,14 @@ Ideal Nimko Ltd.`;
                                             }`
                                     }>
                                         <div className="flex sm:block">
-                                            <div className="relative w-28 shrink-0 border-r border-gray-100 bg-white sm:w-auto sm:border-r-0">
+                                            <div className="relative w-20 shrink-0 border-r border-gray-100 bg-white sm:w-auto sm:border-r-0">
                                                 <img src={
                                                         product.imageURL
                                                     }
                                                     alt={
                                                         product.name
                                                     }
-                                                    className="w-full h-full min-h-[120px] object-contain p-2 sm:h-48 sm:min-h-0 sm:p-0" />
+                                                    className="w-full h-full min-h-[84px] object-contain p-1 sm:h-48 sm:min-h-0 sm:p-0" />
                                                 {
                                                 isLowStock && ! isOutOfStock && (
                                                     <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded-full text-[10px] sm:text-xs font-semibold animate-pulse">
@@ -1141,9 +1142,9 @@ Ideal Nimko Ltd.`;
                                                     </div>
                                                 )
                                             } </div>
-                                            <div className="flex min-w-0 flex-1 flex-col p-2.5 sm:p-4">
-                                                <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-2">
-                                                    <h3 className="text-sm sm:text-lg font-semibold text-gray-900 leading-tight line-clamp-2">
+                                            <div className="flex min-w-0 flex-1 flex-col p-1.5 sm:p-4">
+                                                <div className="flex items-start justify-between gap-1.5 mb-0.5 sm:mb-2">
+                                                    <h3 className="text-[13px] sm:text-lg font-semibold text-gray-900 leading-tight line-clamp-2">
                                                         {
                                                         product.name
                                                     }</h3>
@@ -1158,11 +1159,11 @@ Ideal Nimko Ltd.`;
                                                     {
                                                     product.description
                                                 }</p>
-                                                <div className="flex items-end justify-between gap-2 mb-2 sm:mb-3 mt-auto">
-                                                    <span className="text-2xl sm:text-xl font-bold text-yellow-600 leading-none"> {
+                                                <div className="flex items-end justify-between gap-1.5 mb-1 sm:mb-3 mt-auto">
+                                                    <span className="text-lg sm:text-xl font-bold text-yellow-600 leading-none"> {
                                                         product.price
                                                     }</span>
-                                                    <div className="text-right text-[11px] sm:text-sm leading-tight text-gray-500">
+                                                    <div className="text-right text-[10px] sm:text-sm leading-tight text-gray-500">
                                                     <div className={
                                                             `${
                                                                 isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'
@@ -1184,20 +1185,33 @@ Ideal Nimko Ltd.`;
                                                         ) : null
                                                     } </div>
                                                 </div>
+                                                <div className="flex items-center justify-between rounded-md bg-gray-100 px-1 py-0.5 sm:px-2 sm:py-1.5">
                                                     <button onClick={
-                                                        () => addToCart(product)
-                                                    }
-                                                    disabled={
-                                                        isOutOfStock
-                                                    }
-                                                    className={
-                                                        `w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base transition-all duration-300 ${
-                                                            isOutOfStock ? 'bg-gray-400 text-gray-600 cursor-not-allowed' : isLowStock ? 'bg-red-500 text-white hover:bg-red-600 hover:scale-105 transform' : 'bg-yellow-500 text-white hover:bg-yellow-600 hover:scale-105 transform'
-                                                        }`
-                                                }>
-                                                    {
-                                                    isOutOfStock || product.stock <= 0 ? 'Out of Stock' : 'Add to Cart'
-                                                } </button>
+                                                            () => currentQuantity > 0 && updateQuantity(product._id, currentQuantity - 1)
+                                                        }
+                                                        disabled={
+                                                            currentQuantity <= 0
+                                                        }
+                                                        className="flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-white text-base sm:text-lg font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">
+                                                        -
+                                                    </button>
+                                                    <span className="min-w-[24px] text-center text-sm sm:text-lg font-semibold text-gray-900">
+                                                        {currentQuantity}
+                                                    </span>
+                                                    <button onClick={
+                                                            () => cartItem ? updateQuantity(product._id, currentQuantity + 1) : addToCart(product)
+                                                        }
+                                                        disabled={
+                                                            isOutOfStock
+                                                        }
+                                                        className={
+                                                            `flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-md text-base sm:text-lg font-semibold text-white shadow-sm transition ${
+                                                                isOutOfStock ? 'bg-gray-400 cursor-not-allowed' : isLowStock ? 'bg-red-500 hover:bg-red-600' : 'bg-yellow-500 hover:bg-yellow-600'
+                                                            }`
+                                                    }>
+                                                        +
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
