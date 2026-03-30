@@ -47,6 +47,17 @@ const reportTypeLabels = {
   annually: 'Annually'
 };
 
+const emptyDailySalesSummary = {
+  totalShopkeepers: 0,
+  totalOrders: 0,
+  totalSales: 0,
+  totalReceived: 0,
+  totalPending: 0,
+  totalCommission: 0
+};
+
+const performanceTablePageSize = 10;
+
 export default function AnalyticsDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -64,6 +75,21 @@ export default function AnalyticsDashboard() {
   const [topProducts, setTopProducts] = useState([]);
   const [salesmanPerformance, setSalesmanPerformance] = useState([]);
   const [shopkeeperPerformance, setShopkeeperPerformance] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [dailyViewDate, setDailyViewDate] = useState(() => toInputDate(new Date()));
+  const [dailyCityFilter, setDailyCityFilter] = useState('');
+  const [dailySalesSummary, setDailySalesSummary] = useState(emptyDailySalesSummary);
+  const [dailyShopkeeperSales, setDailyShopkeeperSales] = useState([]);
+  const [dailySalesLoading, setDailySalesLoading] = useState(true);
+  const [dailySalesError, setDailySalesError] = useState('');
+  const [topProductsPage, setTopProductsPage] = useState(1);
+  const [salesmanPage, setSalesmanPage] = useState(1);
+  const [shopkeeperPage, setShopkeeperPage] = useState(1);
+  const [expandedSections, setExpandedSections] = useState({
+    topProducts: false,
+    salesmen: false,
+    shopkeepers: false
+  });
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState('monthly');
   const [dateRange, setDateRange] = useState(() => ({
@@ -79,6 +105,38 @@ export default function AnalyticsDashboard() {
     
     return () => clearInterval(interval);
   }, [dateRange]);
+
+  useEffect(() => {
+    fetchCities();
+  }, []);
+
+  useEffect(() => {
+    fetchDailyShopkeeperSales();
+
+    const interval = setInterval(fetchDailyShopkeeperSales, 60000);
+    return () => clearInterval(interval);
+  }, [dailyViewDate, dailyCityFilter]);
+
+  useEffect(() => {
+    setTopProductsPage((currentPage) => {
+      const totalPages = Math.max(1, Math.ceil(topProducts.length / performanceTablePageSize));
+      return Math.min(currentPage, totalPages);
+    });
+  }, [topProducts]);
+
+  useEffect(() => {
+    setSalesmanPage((currentPage) => {
+      const totalPages = Math.max(1, Math.ceil(salesmanPerformance.length / performanceTablePageSize));
+      return Math.min(currentPage, totalPages);
+    });
+  }, [salesmanPerformance]);
+
+  useEffect(() => {
+    setShopkeeperPage((currentPage) => {
+      const totalPages = Math.max(1, Math.ceil(shopkeeperPerformance.length / performanceTablePageSize));
+      return Math.min(currentPage, totalPages);
+    });
+  }, [shopkeeperPerformance]);
 
   const fetchAnalytics = async () => {
     try {
@@ -136,6 +194,56 @@ export default function AnalyticsDashboard() {
     }
   };
 
+  const fetchCities = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(api.cities.getAll(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setCities(response.data.cities || []);
+    } catch (error) {
+      console.error('Error fetching cities:', error);
+    }
+  };
+
+  const fetchDailyShopkeeperSales = async () => {
+    try {
+      setDailySalesLoading(true);
+      setDailySalesError('');
+
+      const token = localStorage.getItem('adminToken');
+      const selectedDate = dailyViewDate ? new Date(`${dailyViewDate}T00:00:00`) : new Date();
+      const timezoneOffsetMinutes = Number.isNaN(selectedDate.getTime())
+        ? new Date().getTimezoneOffset()
+        : selectedDate.getTimezoneOffset();
+      const params = new URLSearchParams({
+        date: dailyViewDate || toInputDate(new Date()),
+        timezoneOffsetMinutes: String(timezoneOffsetMinutes)
+      });
+
+      if (dailyCityFilter) {
+        params.set('city', dailyCityFilter);
+      }
+
+      const response = await axios.get(`${api.analytics.getDailyShopkeeperSales()}?${params.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      setDailySalesSummary({
+        ...emptyDailySalesSummary,
+        ...(response.data.summary || {})
+      });
+      setDailyShopkeeperSales(response.data.rows || []);
+    } catch (error) {
+      console.error('Error fetching daily shopkeeper sales:', error);
+      setDailySalesSummary(emptyDailySalesSummary);
+      setDailyShopkeeperSales([]);
+      setDailySalesError(error.response?.data?.error || error.message || 'Unable to load daily shopkeeper sales.');
+    } finally {
+      setDailySalesLoading(false);
+    }
+  };
+
   const formatCurrency = (amount) => {
     return `PKR ${new Intl.NumberFormat('en-IN', {
       minimumFractionDigits: 2,
@@ -145,6 +253,28 @@ export default function AnalyticsDashboard() {
 
   const formatNumber = (num) => {
     return new Intl.NumberFormat('en-IN').format(num);
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleString('en-PK', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+  };
+
+  const formatSelectedDay = (value) => {
+    if (!value) return 'Selected day';
+
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return parsed.toLocaleDateString('en-PK', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
   };
 
   const safeMonthlyStats = monthlyStats || [];
@@ -249,6 +379,25 @@ export default function AnalyticsDashboard() {
     };
   }, [reportRows]);
 
+  const topProductsTotalPages = Math.max(1, Math.ceil(topProducts.length / performanceTablePageSize));
+  const salesmanTotalPages = Math.max(1, Math.ceil(salesmanPerformance.length / performanceTablePageSize));
+  const shopkeeperTotalPages = Math.max(1, Math.ceil(shopkeeperPerformance.length / performanceTablePageSize));
+
+  const paginatedTopProducts = useMemo(() => {
+    const startIndex = (topProductsPage - 1) * performanceTablePageSize;
+    return topProducts.slice(startIndex, startIndex + performanceTablePageSize);
+  }, [topProducts, topProductsPage]);
+
+  const paginatedSalesmen = useMemo(() => {
+    const startIndex = (salesmanPage - 1) * performanceTablePageSize;
+    return salesmanPerformance.slice(startIndex, startIndex + performanceTablePageSize);
+  }, [salesmanPerformance, salesmanPage]);
+
+  const paginatedShopkeepers = useMemo(() => {
+    const startIndex = (shopkeeperPage - 1) * performanceTablePageSize;
+    return shopkeeperPerformance.slice(startIndex, startIndex + performanceTablePageSize);
+  }, [shopkeeperPerformance, shopkeeperPage]);
+
   const handleApplyReportPeriod = () => {
     setDateRange(getPresetDateRange(reportType));
   };
@@ -274,6 +423,43 @@ export default function AnalyticsDashboard() {
 
   const openOutstandingDetails = () => {
     navigate(`/admin/analytics/outstanding-details?${getDateRangeQuery()}`);
+  };
+
+  const toggleSection = (sectionKey) => {
+    setExpandedSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey]
+    }));
+  };
+
+  const renderPaginationControls = (currentPage, totalPages, setPage) => {
+    if (totalPages <= 1) return null;
+
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
+        <p className="text-sm text-gray-500">
+          Page {formatNumber(currentPage)} of {formatNumber(totalPages)}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -651,110 +837,315 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Top Products */}
-      {topProducts.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow no-print">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🏆 Top Products</h3>
+      <div className="bg-white p-6 rounded-lg shadow no-print mt-8">
+        <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Daily Shopkeeper Sales View</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Check one day at a time to see which shopkeepers placed orders, what was sold, and how much was received.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Daily Date</label>
+              <input
+                type="date"
+                value={dailyViewDate}
+                onChange={(e) => setDailyViewDate(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+              <select
+                value={dailyCityFilter}
+                onChange={(e) => setDailyCityFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 min-w-[220px]"
+              >
+                <option value="">All Cities</option>
+                {cities.map((city) => (
+                  <option key={city._id} value={city._id}>
+                    {city.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDailyViewDate(toInputDate(new Date()))}
+              className="self-end bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors"
+            >
+              Today
+            </button>
+
+            <button
+              type="button"
+              onClick={fetchDailyShopkeeperSales}
+              className="self-end bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
+            >
+              Refresh Daily View
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Selected Day</p>
+            <p className="text-sm font-semibold text-gray-900 mt-1">{formatSelectedDay(dailyViewDate)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Daily Sales</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">{formatCurrency(dailySalesSummary.totalSales)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Amount Received</p>
+            <p className="text-lg font-semibold text-green-700 mt-1">{formatCurrency(dailySalesSummary.totalReceived)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Pending Amount</p>
+            <p className="text-lg font-semibold text-red-700 mt-1">{formatCurrency(dailySalesSummary.totalPending)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500">Orders / Shopkeepers</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">
+              {formatNumber(dailySalesSummary.totalOrders)} / {formatNumber(dailySalesSummary.totalShopkeepers)}
+            </p>
+          </div>
+        </div>
+
+        {dailySalesLoading ? (
+          <div className="text-sm text-gray-500 py-6">Loading daily shopkeeper sales...</div>
+        ) : dailySalesError ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {dailySalesError}
+          </div>
+        ) : dailyShopkeeperSales.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+            No shopkeeper sales found for the selected day and city.
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity Sold</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shopkeeper</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">City</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Orders</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sales</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Pending</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Order</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Order</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {topProducts.slice(0, 10).map((product, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.productName}
+                {dailyShopkeeperSales.map((row) => (
+                  <tr key={row.shopkeeperId}>
+                    <td className="px-4 py-4 text-sm text-gray-900">
+                      <div className="font-medium">{row.shopkeeperName}</div>
+                      <div className="text-xs text-gray-500">{row.shopkeeperEmail || '-'}</div>
+                      <div className="text-xs text-gray-500">{row.shopkeeperPhone || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatNumber(product.totalQuantity)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatCurrency(product.totalRevenue)}
-                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-600">{row.cityName || 'Unassigned'}</td>
+                    <td className="px-4 py-4 text-sm text-right text-gray-900">{formatNumber(row.totalOrders)}</td>
+                    <td className="px-4 py-4 text-sm text-right font-medium text-gray-900">{formatCurrency(row.totalSales)}</td>
+                    <td className="px-4 py-4 text-sm text-right text-green-700">{formatCurrency(row.totalReceived)}</td>
+                    <td className="px-4 py-4 text-sm text-right text-red-700">{formatCurrency(row.totalPending)}</td>
+                    <td className="px-4 py-4 text-sm text-right text-gray-900">{formatCurrency(row.averageOrderValue)}</td>
+                    <td className="px-4 py-4 text-sm text-gray-600">{formatDateTime(row.lastOrderDate)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Top Products */}
+      {topProducts.length > 0 && (
+        <div className="bg-white p-6 rounded-lg shadow no-print">
+          <button
+            type="button"
+            onClick={() => toggleSection('topProducts')}
+            className="w-full flex items-center justify-between gap-4 text-left"
+          >
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">🏆 Top Products</h3>
+              <p className="text-xs text-gray-500 mt-1">{formatNumber(topProducts.length)} records</p>
+            </div>
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-600">
+              {expandedSections.topProducts ? 'Collapse' : 'Expand'}
+              <svg
+                className={`h-5 w-5 transition-transform ${expandedSections.topProducts ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </span>
+          </button>
+
+          {expandedSections.topProducts && (
+            <>
+              <div className="overflow-x-auto mt-4">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity Sold</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedTopProducts.map((product, index) => (
+                      <tr key={`${product.productName || 'product'}-${index}`}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {product.productName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatNumber(product.totalQuantity)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(product.totalRevenue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {renderPaginationControls(topProductsPage, topProductsTotalPages, setTopProductsPage)}
+            </>
+          )}
         </div>
       )}
 
       {/* Salesman Performance */}
       {salesmanPerformance.length > 0 && (
         <div className="bg-white p-6 rounded-lg shadow no-print">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">👨‍💼 Top Salesmen</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orders</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Order Value</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {salesmanPerformance.slice(0, 10).map((salesman, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {salesman.salesmanName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatNumber(salesman.totalOrders)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatCurrency(salesman.totalRevenue)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatCurrency(salesman.averageOrderValue)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <button
+            type="button"
+            onClick={() => toggleSection('salesmen')}
+            className="w-full flex items-center justify-between gap-4 text-left"
+          >
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">👨‍💼 Top Salesmen</h3>
+              <p className="text-xs text-gray-500 mt-1">{formatNumber(salesmanPerformance.length)} records</p>
+            </div>
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-600">
+              {expandedSections.salesmen ? 'Collapse' : 'Expand'}
+              <svg
+                className={`h-5 w-5 transition-transform ${expandedSections.salesmen ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </span>
+          </button>
+
+          {expandedSections.salesmen && (
+            <>
+              <div className="overflow-x-auto mt-4">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Salesman</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orders</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Order Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedSalesmen.map((salesman, index) => (
+                      <tr key={`${salesman.salesmanName || 'salesman'}-${index}`}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {salesman.salesmanName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatNumber(salesman.totalOrders)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(salesman.totalRevenue)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(salesman.averageOrderValue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {renderPaginationControls(salesmanPage, salesmanTotalPages, setSalesmanPage)}
+            </>
+          )}
         </div>
       )}
 
       {/* Shopkeeper Performance */}
       {shopkeeperPerformance.length > 0 && (
         <div className="bg-white p-6 rounded-lg shadow no-print">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🏪 Top Shopkeepers</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shopkeeper</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orders</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Order Value</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {shopkeeperPerformance.slice(0, 10).map((shopkeeper, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {shopkeeper.shopkeeperName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatNumber(shopkeeper.totalOrders)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatCurrency(shopkeeper.totalRevenue)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatCurrency(shopkeeper.averageOrderValue)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <button
+            type="button"
+            onClick={() => toggleSection('shopkeepers')}
+            className="w-full flex items-center justify-between gap-4 text-left"
+          >
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">🏪 Top Shopkeepers</h3>
+              <p className="text-xs text-gray-500 mt-1">{formatNumber(shopkeeperPerformance.length)} records</p>
+            </div>
+            <span className="inline-flex items-center gap-2 text-sm font-medium text-gray-600">
+              {expandedSections.shopkeepers ? 'Collapse' : 'Expand'}
+              <svg
+                className={`h-5 w-5 transition-transform ${expandedSections.shopkeepers ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </span>
+          </button>
+
+          {expandedSections.shopkeepers && (
+            <>
+              <div className="overflow-x-auto mt-4">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shopkeeper</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orders</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Order Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedShopkeepers.map((shopkeeper, index) => (
+                      <tr key={`${shopkeeper.shopkeeperName || 'shopkeeper'}-${index}`}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {shopkeeper.shopkeeperName}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatNumber(shopkeeper.totalOrders)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(shopkeeper.totalRevenue)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatCurrency(shopkeeper.averageOrderValue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {renderPaginationControls(shopkeeperPage, shopkeeperTotalPages, setShopkeeperPage)}
+            </>
+          )}
         </div>
       )}
     </div>

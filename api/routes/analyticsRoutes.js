@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Order from '../models/order.js';
 import ShopkeeperOrder from '../models/ShopkeeperOrder.js';
@@ -714,6 +715,157 @@ router.get('/payments/outstanding-details', authenticateToken, requireAdmin, asy
     });
   } catch (error) {
     console.error('Error fetching outstanding balance details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// @route   GET /api/analytics/daily-shopkeeper-sales
+// @desc    Get one-day shopkeeper sales summary with optional city filter
+// @access  Private (Admin, Super Admin)
+router.get('/daily-shopkeeper-sales', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { date, city, timezoneOffsetMinutes } = req.query;
+
+    const parseLocalDateBoundary = (dateValue, endOfDay = false) => {
+      if (!dateValue) return null;
+
+      const [year, month, day] = String(dateValue).split('-').map(Number);
+      if (!year || !month || !day) return null;
+
+      const parsedOffset = Number(timezoneOffsetMinutes);
+      const offsetMinutes = Number.isFinite(parsedOffset) ? parsedOffset : 0;
+      const utcTimestamp = Date.UTC(
+        year,
+        month - 1,
+        day,
+        endOfDay ? 23 : 0,
+        endOfDay ? 59 : 0,
+        endOfDay ? 59 : 0,
+        endOfDay ? 999 : 0
+      );
+
+      return new Date(utcTimestamp + (offsetMinutes * 60 * 1000));
+    };
+
+    const selectedDate = date || new Date().toISOString().slice(0, 10);
+    const start = parseLocalDateBoundary(selectedDate, false);
+    const end = parseLocalDateBoundary(selectedDate, true);
+
+    if (!start || !end) {
+      return res.status(400).json({ error: 'Invalid date. Expected YYYY-MM-DD.' });
+    }
+
+    let cityObjectId = null;
+    if (city) {
+      if (!mongoose.Types.ObjectId.isValid(city)) {
+        return res.status(400).json({ error: 'Invalid city id.' });
+      }
+      cityObjectId = new mongoose.Types.ObjectId(city);
+    }
+
+    const dailyRows = await ShopkeeperOrder.aggregate([
+      {
+        $match: {
+          orderDate: {
+            $gte: start,
+            $lte: end
+          },
+          status: { $ne: 'cancelled' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'shopkeeper',
+          foreignField: '_id',
+          as: 'shopkeeper'
+        }
+      },
+      { $unwind: '$shopkeeper' },
+      ...(cityObjectId ? [{
+        $match: {
+          'shopkeeper.city': cityObjectId
+        }
+      }] : []),
+      {
+        $lookup: {
+          from: 'cities',
+          localField: 'shopkeeper.city',
+          foreignField: '_id',
+          as: 'city'
+        }
+      },
+      {
+        $unwind: {
+          path: '$city',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $group: {
+          _id: '$shopkeeper._id',
+          shopkeeperName: { $first: '$shopkeeper.name' },
+          shopkeeperEmail: { $first: '$shopkeeper.email' },
+          shopkeeperPhone: { $first: '$shopkeeper.phone' },
+          cityId: { $first: '$city._id' },
+          cityName: { $first: { $ifNull: ['$city.name', 'Unassigned'] } },
+          totalOrders: { $sum: 1 },
+          totalSales: { $sum: '$totalAmount' },
+          totalReceived: { $sum: '$amountPaid' },
+          totalPending: { $sum: '$pendingAmount' },
+          totalCommission: { $sum: '$commission' },
+          averageOrderValue: { $avg: '$totalAmount' },
+          lastOrderDate: { $max: '$orderDate' }
+        }
+      },
+      {
+        $sort: {
+          totalSales: -1,
+          shopkeeperName: 1
+        }
+      }
+    ]);
+
+    const summary = dailyRows.reduce((acc, row) => {
+      acc.totalShopkeepers += 1;
+      acc.totalOrders += Number(row.totalOrders || 0);
+      acc.totalSales += Number(row.totalSales || 0);
+      acc.totalReceived += Number(row.totalReceived || 0);
+      acc.totalPending += Number(row.totalPending || 0);
+      acc.totalCommission += Number(row.totalCommission || 0);
+      return acc;
+    }, {
+      totalShopkeepers: 0,
+      totalOrders: 0,
+      totalSales: 0,
+      totalReceived: 0,
+      totalPending: 0,
+      totalCommission: 0
+    });
+
+    res.json({
+      success: true,
+      date: selectedDate,
+      city: cityObjectId ? cityObjectId.toString() : '',
+      summary,
+      rows: dailyRows.map((row) => ({
+        shopkeeperId: row._id,
+        shopkeeperName: row.shopkeeperName,
+        shopkeeperEmail: row.shopkeeperEmail,
+        shopkeeperPhone: row.shopkeeperPhone,
+        cityId: row.cityId || null,
+        cityName: row.cityName,
+        totalOrders: row.totalOrders,
+        totalSales: row.totalSales,
+        totalReceived: row.totalReceived,
+        totalPending: row.totalPending,
+        totalCommission: row.totalCommission,
+        averageOrderValue: row.averageOrderValue,
+        lastOrderDate: row.lastOrderDate
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching daily shopkeeper sales analytics:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -135,6 +135,7 @@ export const api = {
   analytics: {
     getDashboard: () => withApi('/analytics/dashboard'),
     getSalesmanAnalytics: (salesmanId) => withApi(`/analytics/salesman/${salesmanId}`),
+    getDailyShopkeeperSales: () => withApi('/analytics/daily-shopkeeper-sales'),
     getReceivedPaymentsDetails: () => withApi('/analytics/payments/received-details'),
     getOutstandingBalancesDetails: () => withApi('/analytics/payments/outstanding-details')
   },
