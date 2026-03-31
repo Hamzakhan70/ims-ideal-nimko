@@ -67,6 +67,10 @@ export default function ShopkeeperOrderPage() {
         return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
     };
 
+    const getTotalItems = (items = cart) => {
+        return items.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
+    };
+
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
         if (cart.length === 0) {
@@ -331,6 +335,10 @@ export default function ShopkeeperOrderPage() {
                                 }
 
                                     <div className="border-t pt-4">
+                                        <div className="flex justify-between text-sm text-gray-600 mb-2">
+                                            <span>Total Items:</span>
+                                            <span>{getTotalItems()}</span>
+                                        </div>
                                         <div className="flex justify-between text-lg font-semibold">
                                             <span>Total:</span>
                                             <span>PKR {

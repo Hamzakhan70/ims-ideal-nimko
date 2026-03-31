@@ -77,6 +77,10 @@ export default function ShopkeeperDashboard() {
     return cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
   };
 
+  const getTotalItems = (items = cart) => {
+    return items.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
+  };
+
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     try {
@@ -137,7 +141,8 @@ export default function ShopkeeperDashboard() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Cart ({cart.length} items)</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Cart ({getTotalItems()} items)</h3>
+              <p className="text-sm text-gray-500">{cart.length} products selected</p>
               <p className="text-gray-600">Total: PKR {getTotalAmount()}</p>
             </div>
             <button
@@ -415,6 +420,10 @@ export default function ShopkeeperDashboard() {
                         <span>PKR {item.product.price * item.quantity}</span>
                       </div>
                     ))}
+                    <div className="flex justify-between text-sm text-gray-600 pt-2">
+                      <span>Total Items:</span>
+                      <span>{getTotalItems()}</span>
+                    </div>
                     <div className="border-t pt-2 font-semibold">
                       <div className="flex justify-between">
                         <span>Total:</span>

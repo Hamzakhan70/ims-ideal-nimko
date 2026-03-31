@@ -277,6 +277,10 @@ export default function SalesmanOrderPlacement() {
         }, 0);
     };
 
+    const getTotalItems = (items = cart) => {
+        return items.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
+    };
+
     const getItemDiscountPerUnit = (item) => {
         const storedPerUnit = Number(item.discountPerUnit ?? item.discountAmount);
         if (Number.isFinite(storedPerUnit) && storedPerUnit > 0) {
@@ -315,6 +319,14 @@ export default function SalesmanOrderPlacement() {
         return Math.round(num).toString();
     };
 
+    const formatReceiptMoney = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return '0.00';
+        }
+        return num.toFixed(2);
+    };
+
     const getDisplayOrderId = (order) => {
         if (!order?._id) {
             return 'N/A';
@@ -332,6 +344,201 @@ export default function SalesmanOrderPlacement() {
         return 'Pending';
     };
 
+    const formatReceiptDateTime = (value) => {
+        if (!value) {
+            return 'N/A';
+        }
+        return new Date(value).toLocaleString('en-PK');
+    };
+
+    const formatPaymentMethodLabel = (paymentMethod) => {
+        const normalized = String(paymentMethod || '').replace(/_/g, ' ').trim();
+        if (!normalized) {
+            return 'N/A';
+        }
+        return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+    };
+
+    const getReceiptStatusClassName = (paymentStatus) => {
+        if (paymentStatus === 'paid') {
+            return 'receipt-badge receipt-badge--paid';
+        }
+        if (paymentStatus === 'partial') {
+            return 'receipt-badge receipt-badge--partial';
+        }
+        return 'receipt-badge receipt-badge--pending';
+    };
+
+    const receiptStyles = `
+      .receipt-compact {
+        width: 100%;
+        color: #000000;
+        font-family: Arial, sans-serif;
+        font-size: 10px;
+        line-height: 1.2;
+      }
+      .receipt-compact * {
+        box-sizing: border-box;
+      }
+      .receipt-compact-header {
+        text-align: center;
+        margin-bottom: 8px;
+      }
+      .receipt-compact-header h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .receipt-compact-header p {
+        margin: 2px 0 0;
+        font-size: 11px;
+      }
+      .receipt-compact-shop {
+        margin-top: 4px !important;
+        font-size: 13px !important;
+        font-weight: 700;
+      }
+      .receipt-compact-info {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 8px;
+      }
+      .receipt-compact-info td {
+        padding: 2px 0;
+        vertical-align: top;
+      }
+      .receipt-compact-info td:first-child {
+        width: 38%;
+        font-weight: 700;
+        white-space: nowrap;
+        padding-right: 8px;
+      }
+      .receipt-compact-info td:last-child {
+        width: 62%;
+      }
+      .receipt-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+      .receipt-badge--paid {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .receipt-badge--partial {
+        background: #ffedd5;
+        color: #c2410c;
+      }
+      .receipt-badge--pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .receipt-compact-note {
+        margin-bottom: 8px;
+      }
+      .receipt-compact-note strong {
+        display: inline-block;
+        margin-right: 4px;
+      }
+      .receipt-compact-items {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 10px;
+        margin-bottom: 6px;
+      }
+      .receipt-compact-items th,
+      .receipt-compact-items td {
+        padding: 2px 3px;
+        vertical-align: top;
+      }
+      .receipt-compact-items thead th {
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+        font-weight: 700;
+      }
+      .receipt-compact-items tbody td {
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .receipt-compact-items tfoot td {
+        font-weight: 700;
+      }
+      .receipt-compact-items th:nth-child(1),
+      .receipt-compact-items td:nth-child(1) {
+        width: 42%;
+        text-align: left;
+        word-break: break-word;
+      }
+      .receipt-compact-items th:nth-child(2),
+      .receipt-compact-items td:nth-child(2) {
+        width: 10%;
+        text-align: center;
+      }
+      .receipt-compact-items th:nth-child(3),
+      .receipt-compact-items td:nth-child(3) {
+        width: 16%;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .receipt-compact-items th:nth-child(4),
+      .receipt-compact-items td:nth-child(4) {
+        width: 14%;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .receipt-compact-items th:nth-child(5),
+      .receipt-compact-items td:nth-child(5) {
+        width: 18%;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .receipt-compact-total-label {
+        text-align: left;
+        padding-top: 3px !important;
+      }
+      .receipt-compact-total-value {
+        text-align: right;
+        padding-top: 3px !important;
+      }
+      .receipt-compact-total-value--success {
+        color: #15803d;
+      }
+      .receipt-compact-total-value--warning {
+        color: #c2410c;
+      }
+      .receipt-compact-total-value--danger {
+        color: #b91c1c;
+      }
+      .receipt-compact-footer {
+        margin-top: 8px;
+        text-align: center;
+        font-size: 10px;
+      }
+      .receipt-compact-footer p {
+        margin: 3px 0;
+      }
+      @media print {
+        body {
+          margin: 0;
+          padding: 6px;
+          font-family: Arial, sans-serif;
+        }
+        .receipt-compact {
+          font-size: 9px;
+        }
+        .receipt-badge {
+          padding: 1px 5px;
+          font-size: 9px;
+        }
+        .receipt-compact-items {
+          font-size: 9px;
+        }
+      }
+    `;
+
     const buildShareReceiptText = (order) => {
         if (!order) {
             return '';
@@ -348,6 +555,7 @@ export default function SalesmanOrderPlacement() {
             `Order Date: ${new Date(order.createdAt).toLocaleString()}`,
             `Shop Name: ${shopName}`,
             `Salesman: ${salesmanName}`,
+            `Total Items: ${getTotalItems(order.items || [])}`,
             `Payment Method: ${order.paymentMethod || 'N/A'}`,
             `Payment Status: ${getPaymentStatusLabel(order.paymentStatus)}`
         ];
@@ -606,46 +814,14 @@ export default function SalesmanOrderPlacement() {
             lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
         }</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 10px; line-height: 1; fontSize:'10px' }
-            .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 5px; }
-            .header h1 { margin: 0; font-size: 24px; color: #333; font-family: Arial, sans-serif; font-weight: bold; -webkit-font-smoothing: antialiased; }
-            .header p { margin: 5px 0 0 0; font-size: 16px; color: #666; font-family: Arial, sans-serif; }
-            .order-info { margin-bottom: 5px; background: #f9f9f9; padding: 5px; border-radius: 5px; }
-            .order-info p { margin: 5px 0; fontSize:'10px' }
-            .items-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed;  }
-.items-table th, .items-table td { border: 1px solid #000; padding: 2px; text-align: left;  overflow-wrap: break-word; }
-.items-table th:nth-child(1), .items-table td:nth-child(1) { width: 26%; }
-.items-table th:nth-child(2), .items-table td:nth-child(2) { width: 15%; }
-.items-table th:nth-child(3), .items-table td:nth-child(2) { width: 20%; }
-.items-table th:nth-child(4), .items-table td:nth-child(3) { width: 28%; }
-.items-table th:nth-child(5), .items-table td:nth-child(4) { width: 21%; }
-            .items-table th { background-color: #f0f0f0; font-weight: bold; }
-            .items-table tbody tr:nth-child(even) { background-color: #f9f9f9; }
-            .total { font-weight: bold; font-size: 18px; background-color: #e9e9e9; }
-            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; }
-            .shop-name { font-size: 18px; font-weight: bold; color: #2c5aa0; margin: 10px 0; }
-            @media print {
-                body { margin: 0; }
-                .no-print { display: none; }
-                .header { page-break-inside: avoid; }
-                .items-table { page-break-inside: avoid; }
-                .footer { display: block !important; visibility: visible !important; }
-            }
+            ${receiptStyles}
           </style>
         </head>
         <body>
         ${receiptContent}
-        
-          </div>
         </body>
       </html>
     `);
-//     <div class="header">
-//     <h1 style={{margin: 0, fontSize: '26px', fontWeight: 'bold', color: '#333', fontFamily: 'Arial, sans-serif', letterSpacing: '0.5px'}}>Ideal Nimko Ltd.</h1>
-//     <p style={{margin: '5px 0 0 0', fontSize: '16px', color: '#666', fontFamily: 'Arial, sans-serif'}}>Order Receipt</p>
-//       <div class="shop-name">For: ${
-//       lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
-//   }</div>
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
@@ -738,6 +914,7 @@ export default function SalesmanOrderPlacement() {
     return (
         <div className="min-h-screen bg-gray-50 py-4 sm:py-8">
             <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+                <style>{receiptStyles}</style>
                 <h1 className="text-xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-8">📦 Place Order for Shopkeeper</h1>
 
                 {/* Receipt Modal */}
@@ -755,173 +932,112 @@ export default function SalesmanOrderPlacement() {
                                 </button>
                             </div>
 
-                            <div id="receipt-content">
-                                {/* <div className="header">
-                                    <h1 className="text-2xl font-bold">Ideal Nimko Ltd.</h1>
+                            <div id="receipt-content" className="receipt-compact">
+                                <div className="receipt-compact-header">
+                                    <h3>Ideal Nimko Ltd.</h3>
                                     <p>Order Receipt</p>
-                                </div> */}
-                                <div className="order-info" style={{textAlign: 'center', paddingBottom: '5px', marginBottom: '5px'}}>
-                                <p style={{fontSize:'14px'}}> <strong>Ideal Nimko Ltd.</strong></p>
-    <p style={{margin: '5px 0 0 0', fontSize: '13px',  fontFamily:  "Times New Roman"}}>Order Receipt</p>
-    <div class="shop-name" style={{fontSize:'14px'}}>For: {
-            lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'
-        }</div>
-</div>
+                                    <p className="receipt-compact-shop">For: {lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'Shop'}</p>
+                                </div>
 
-                                <div className="order-info" >
-                                    <p style={{fontSize:'10px'}}>
-                                        <strong>Order ID:</strong>
-                                        {
-                                        // lastOrder?._id?.slice(-6)
-                                        getDisplayOrderId(lastOrder)
-                                    }</p>
-                                    <p style={{fontSize:'10px'}}>
-                                        <strong>Order Date:</strong>
-                                        {
-                                        new Date(lastOrder.createdAt).toLocaleString()
-                                    }</p>
-                                    <p style={{fontSize:'10px'}}>
-                                        <strong>Shop Name:</strong>
-                                        {
-                                        lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'N/A'
-                                    }</p>
-                                    {/* <p>
-                                        <strong>Shopkeeper:</strong>
-                                        {
-                                        lastOrder.shopkeeper ?. name
-                                    }</p> */}
-                                    <p style={{fontSize:'10px'}}>
-                                        <strong>Salesman:</strong>
-                                        {
-                                        lastOrder.placedBySalesman ?. name || lastOrder.salesman ?. name
-                                    }</p>
-                                    {/* <p>
-                                        <strong>Delivery Address:</strong>
-                                        {
-                                        lastOrder.deliveryAddress
-                                    }</p> */}
-                                    <p style={{fontSize:'10px'}}>
-                                        <strong>Payment Method:</strong>
-                                        {
-                                        lastOrder.paymentMethod
-                                    }</p>
-                                    <p style={{fontSize:'10px'}}>
-                                        <strong>Payment Status:</strong>
-                                        <span className={
-                                            `ml-2 px-2 py-1 rounded text-xs font-medium ${
-                                                lastOrder.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' : lastOrder.paymentStatus === 'partial' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'
-                                            }`
-                                        }>
-                                            {
-                                            getPaymentStatusLabel(lastOrder.paymentStatus)
-                                        } </span>
-                                    </p>
-                                    {/* {
-                                    lastOrder.amountPaid > 0 && (
-                                        <p>
-                                            <strong>Amount Paid:</strong>
-                                            <span className="text-green-600"> {
-                                                lastOrder.amountPaid ?. toFixed(2) || '0.00'
-                                            }</span>
-                                        </p>
-                                    )
-                                }
-                                    {
-                                    lastOrder.pendingAmount > 0 && (
-                                        <p>
-                                            <strong>Order Pending Amount:</strong>
-                                            <span className="text-orange-600"> {
-                                                lastOrder.pendingAmount ?. toFixed(2) || '0.00'
-                                            }</span>
-                                        </p>
-                                    )
-                                } */}
-                                    {
-                                    lastOrder.shopkeeper ?. pendingAmount > 0 && (
-                                        <p style={{fontSize:'10px'}}>
-                                            <strong>Total Pending Amount:</strong>
-                                            <span className="text-red-600 font-semibold"> {
-                                                formatReceiptAmount(lastOrder.shopkeeper ?. pendingAmount)
-                                            }</span>
-                                        </p>
-                                    )
-                                }
-                                    {
-                                    lastOrder.notes && <p style={{fontSize:'10px'}}>
+                                <table className="receipt-compact-info">
+                                    <tbody>
+                                        <tr>
+                                            <td>Order ID:</td>
+                                            <td>{getDisplayOrderId(lastOrder)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Order Date:</td>
+                                            <td>{formatReceiptDateTime(lastOrder.createdAt)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Shop Name:</td>
+                                            <td>{lastOrder.shopkeeper ?. shopName || lastOrder.shopkeeper ?. name || 'N/A'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Salesman:</td>
+                                            <td>{lastOrder.placedBySalesman ?. name || lastOrder.salesman ?. name || 'N/A'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Total Items:</td>
+                                            <td>{getTotalItems(lastOrder.items || [])}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Payment Method:</td>
+                                            <td>{formatPaymentMethodLabel(lastOrder.paymentMethod)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Payment Status:</td>
+                                            <td>
+                                                <span className={getReceiptStatusClassName(lastOrder.paymentStatus)}>
+                                                    {getPaymentStatusLabel(lastOrder.paymentStatus)}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>Total Pending Amount:</td>
+                                            <td className={(lastOrder.shopkeeper ?. pendingAmount || 0) > 0 ? 'receipt-compact-total-value--danger' : ''}>
+                                                {formatReceiptAmount(lastOrder.shopkeeper ?. pendingAmount || 0)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                {lastOrder.notes && (
+                                    <div className="receipt-compact-note">
                                         <strong>Notes:</strong>
-                                        {
-                                        lastOrder.notes
-                                    }</p>
-                                } </div>
+                                        <span>{lastOrder.notes}</span>
+                                    </div>
+                                )}
 
-                                {/* <table className="items-table"> */}
-                                <div style={{overflowX: 'auto', width: '100%'}}>
-<table className="items-table" style={{width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed',fontSize:'9px'}}>
+                                <table className="receipt-compact-items">
                                     <thead>
                                         <tr>
                                             <th>Product</th>
-                                            
                                             <th>Qty</th>
                                             <th>Unit Price</th>
                                             <th>Discount</th>
                                             <th>Total</th>
                                         </tr>
                                     </thead>
-                                    <tbody> {
-                                        lastOrder.items.map((item, index) => (
+                                    <tbody>
+                                        {lastOrder.items.map((item, index) => (
                                             <tr key={index}>
-                                                <td>{
-                                                    item.product ?. name || 'Product'
-                                                }</td>
-                                                
-                                                <td>{
-                                                    item.quantity
-                                                }</td>
-                                                <td> {
-                                                    item.unitPrice  || '0'
-                                                }</td>
-                                                <td> {
-                                                    getItemDiscountTotal(item) > 0 ? getItemDiscountTotal(item).toFixed(2) : '0'
-                                                }</td>
-                                                <td> {
-                                                    Number(item.totalPrice || 0).toFixed(2)
-                                                }</td>
+                                                <td>{item.product ?. name || 'Product'}</td>
+                                                <td>{item.quantity}</td>
+                                                <td>{formatReceiptMoney(item.unitPrice || 0)}</td>
+                                                <td>{formatReceiptMoney(getItemDiscountTotal(item))}</td>
+                                                <td>{formatReceiptMoney(item.totalPrice || 0)}</td>
                                             </tr>
-                                        ))
-                                    } </tbody>
+                                        ))}
+                                    </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colSpan="3">Order Total:</td>
-                                            <td colSpan="2"> {
-                                                Number(lastOrder.totalAmount || 0).toFixed(2)
-                                            }</td>
+                                            <td colSpan="4" className="receipt-compact-total-label">Total Items:</td>
+                                            <td className="receipt-compact-total-value">{getTotalItems(lastOrder.items || [])}</td>
                                         </tr>
-                                        {
-                                        lastOrder.amountPaid > 0 && (
+                                        <tr>
+                                            <td colSpan="4" className="receipt-compact-total-label">Order Total:</td>
+                                            <td className="receipt-compact-total-value">{formatReceiptMoney(lastOrder.totalAmount || 0)}</td>
+                                        </tr>
+                                        {lastOrder.amountPaid > 0 && (
                                             <tr>
-                                                <td colSpan="3">Amount Paid:</td>
-                                                <td colSpan="2" className="text-green-600"> {
-                                                    formatReceiptAmount(lastOrder.amountPaid)
-                                                }</td>
+                                                <td colSpan="4" className="receipt-compact-total-label">Amount Paid:</td>
+                                                <td className="receipt-compact-total-value receipt-compact-total-value--success">{formatReceiptAmount(lastOrder.amountPaid)}</td>
                                             </tr>
-                                        )
-                                    }
-                                        {
-                                        lastOrder.pendingAmount > 0 && (
+                                        )}
+                                        {lastOrder.pendingAmount > 0 && (
                                             <tr>
-                                                <td colSpan="3">Pending in this order:</td>
-                                                <td colSpan="2"  className="text-orange-600"> {
-                                                    formatReceiptAmount(lastOrder.pendingAmount)
-                                                }</td>
+                                                <td colSpan="4" className="receipt-compact-total-label">Pending in this order:</td>
+                                                <td className="receipt-compact-total-value receipt-compact-total-value--warning">{formatReceiptAmount(lastOrder.pendingAmount)}</td>
                                             </tr>
-                                        )
-                                    } </tfoot>
+                                        )}
+                                    </tfoot>
                                 </table>
+
+                                <div className="receipt-compact-footer">
+                                    <p>Thank you for your business!</p>
+                                    <p>Generated on: {formatReceiptDateTime(new Date())}</p>
                                 </div>
-                                <div className="order-info" style={{marginTop: '0px', textAlign: 'center', fontSize: '10px', fontFamily: 'Times New Roman',  paddingTop: '0px'}}>
-    <p style={{margin: '4px 0'}}>Thank you for your business!</p>
-    <p style={{margin: '4px 0'}}>Generated on: {new Date().toLocaleString()}</p>
-</div>
                             </div>
 
                             <div className="flex flex-wrap justify-end gap-3 mt-6">
@@ -1440,6 +1556,12 @@ export default function SalesmanOrderPlacement() {
                                                         </div>
                                                     )
                                                 }
+                                                    <div className="flex justify-between text-sm text-gray-600">
+                                                        <span>Total Items:</span>
+                                                        <span> {
+                                                            getTotalItems()
+                                                        }</span>
+                                                    </div>
                                                     <div className="flex justify-between text-lg font-semibold">
                                                         <span>Final Total:</span>
                                                         <span> {
@@ -1466,6 +1588,12 @@ export default function SalesmanOrderPlacement() {
                                                 <span className="text-gray-700">Current Pending:</span>
                                                 <span className="text-red-600 font-semibold"> {
                                                     (selectedShopkeeperDetails ?. pendingAmount || 0).toFixed(2)
+                                                }</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-700">Total Items:</span>
+                                                <span className="font-semibold"> {
+                                                    getTotalItems()
                                                 }</span>
                                             </div>
                                             <div className="flex justify-between">
@@ -1600,6 +1728,9 @@ export default function SalesmanOrderPlacement() {
                     aria-label="Go to cart"
                     title="Go to cart">
                     <span className="text-xl leading-none">↓</span>
+                    <span className="absolute -top-1 -right-1 min-w-[1.25rem] rounded-full bg-red-600 px-1 py-0.5 text-center text-[10px] font-semibold leading-none text-white">
+                        {getTotalItems()}
+                    </span>
                 </button>
             )
         }
