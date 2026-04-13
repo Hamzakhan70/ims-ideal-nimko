@@ -11,6 +11,7 @@ export default function SalesmanOrderPlacement() {
     const [categories, setCategories] = useState([]);
     const [cities, setCities] = useState([]);
     const [cart, setCart] = useState([]);
+    const [shopkeeperPriceMap, setShopkeeperPriceMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -28,6 +29,20 @@ export default function SalesmanOrderPlacement() {
     useEffect(() => {
         fetchData();
     }, []);
+
+    const normalizePriceValue = (value) => {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return null;
+        }
+        return Number(parsed.toFixed(2));
+    };
+
+    const getResolvedShopkeeperPrice = (productId, fallbackPrice, pricingMap = shopkeeperPriceMap) => {
+        const savedPrice = normalizePriceValue(pricingMap?.[productId]);
+        const basePrice = normalizePriceValue(fallbackPrice);
+        return savedPrice !== null ? savedPrice : (basePrice !== null ? basePrice : 0);
+    };
 
     const fetchData = async () => {
         try {
@@ -153,6 +168,7 @@ export default function SalesmanOrderPlacement() {
         }
 
         const existingItem = cart.find(item => item.productId === product._id);
+        const defaultPrice = getResolvedShopkeeperPrice(product._id, product.price);
 
         if (existingItem) { // Check if adding one more would exceed stock
             if (existingItem.quantity >= product.stock) {
@@ -171,7 +187,7 @@ export default function SalesmanOrderPlacement() {
                     productId: product._id,
                     name: product.name,
                     originalPrice: product.price,
-                    customPrice: product.price, // Start with original price
+                    customPrice: defaultPrice,
                     quantity: 1,
                     imageURL: product.imageURL,
                     stock: product.stock, // Store stock for validation
@@ -269,6 +285,58 @@ export default function SalesmanOrderPlacement() {
             };
         }));
     };
+
+    useEffect(() => {
+        let isActive = true;
+
+        const applyPricingToCart = (pricingMap) => {
+            setCart((currentCart) => currentCart.map(item => ({
+                ...item,
+                customPrice: getResolvedShopkeeperPrice(item.productId, item.originalPrice, pricingMap)
+            })));
+        };
+
+        if (!selectedShopkeeper) {
+            setShopkeeperPriceMap({});
+            applyPricingToCart({});
+            return undefined;
+        }
+
+        const loadShopkeeperPrices = async () => {
+            try {
+                const token = localStorage.getItem('adminToken');
+                const response = await axios.get(api.shopkeeperOrders.getDefaultPrices(), {
+                    params: {
+                        shopkeeperId: selectedShopkeeper
+                    },
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!isActive) {
+                    return;
+                }
+
+                const pricingMap = response.data?.priceMap || {};
+                setShopkeeperPriceMap(pricingMap);
+                applyPricingToCart(pricingMap);
+            } catch (error) {
+                console.error('Error loading saved shopkeeper prices:', error);
+                if (!isActive) {
+                    return;
+                }
+                setShopkeeperPriceMap({});
+                applyPricingToCart({});
+            }
+        };
+
+        loadShopkeeperPrices();
+
+        return () => {
+            isActive = false;
+        };
+    }, [selectedShopkeeper]);
 
     const getTotalAmount = () => {
         return cart.reduce((total, item) => {
@@ -1208,6 +1276,8 @@ export default function SalesmanOrderPlacement() {
                                 const availableStock = Math.max(0, (product.stock || 0) - reservedQuantity);
                                 const isLowStock = availableStock > 0 && availableStock < 5;
                                 const isOutOfStock = availableStock <= 0;
+                                const displayPrice = getResolvedShopkeeperPrice(product._id, product.price);
+                                const hasSavedShopkeeperPrice = displayPrice !== product.price;
 
                                 return (
                                     <div key={
@@ -1263,10 +1333,26 @@ export default function SalesmanOrderPlacement() {
                                                     product.description
                                                 }</p>
                                                 <div className="flex items-end justify-between gap-1.5 mb-1 sm:mb-3 mt-auto">
-                                                    <span className="text-lg sm:text-xl font-bold text-yellow-600 leading-none"> {
-                                                        product.price
-                                                    }</span>
+                                                    <div>
+                                                        <span className="text-lg sm:text-xl font-bold text-yellow-600 leading-none"> {
+                                                            displayPrice
+                                                        }</span>
+                                                        {
+                                                        hasSavedShopkeeperPrice && (
+                                                            <div className="text-[11px] text-green-600 sm:text-xs">
+                                                                Base: {product.price}
+                                                            </div>
+                                                        )
+                                                    }
+                                                    </div>
                                                     <div className="text-right text-[15px] sm:text-sm leading-tight text-black">
+                                                    {
+                                                        hasSavedShopkeeperPrice && (
+                                                            <div className="text-[11px] font-medium text-green-600 sm:text-xs">
+                                                                Saved shopkeeper price
+                                                            </div>
+                                                        )
+                                                    }
                                                     <div className={
                                                             `${
                                                                 isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'
@@ -1519,7 +1605,7 @@ export default function SalesmanOrderPlacement() {
                                                     {
                                                     item.customPrice !== '' && item.customPrice !== item.originalPrice && (
                                                         <p className="text-xs text-blue-600">
-                                                            Custom Price Applied
+                                                            Shopkeeper Price Applied
                                                         </p>
                                                     )
                                                 } </div>

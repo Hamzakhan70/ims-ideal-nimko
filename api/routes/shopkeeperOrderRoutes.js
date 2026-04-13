@@ -1,6 +1,7 @@
 import express from 'express';
 import ShopkeeperOrder from '../models/ShopkeeperOrder.js';
 import Product from '../models/project.js';
+import ShopkeeperProductPrice from '../models/ShopkeeperProductPrice.js';
 import User from '../models/User.js';
 import ShopSalesmanAssignment from '../models/ShopSalesmanAssignment.js';
 import Notification from '../models/Notification.js';
@@ -69,6 +70,74 @@ const requireOrderPlacer = (req, res, next) => {
   next();
 };
 
+const normalizePrice = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return Number(parsed.toFixed(2));
+};
+
+const pricesMatch = (left, right) => {
+  const normalizedLeft = normalizePrice(left);
+  const normalizedRight = normalizePrice(right);
+  return normalizedLeft !== null && normalizedRight !== null && normalizedLeft === normalizedRight;
+};
+
+const getSavedPriceMap = async (shopkeeperId, productIds = []) => {
+  const query = { shopkeeper: shopkeeperId };
+  if (productIds.length > 0) {
+    query.product = { $in: productIds };
+  }
+
+  const savedPrices = await ShopkeeperProductPrice.find(query).select('product price');
+
+  return savedPrices.reduce((priceMap, entry) => {
+    const normalizedPrice = normalizePrice(entry.price);
+    if (normalizedPrice !== null) {
+      priceMap[entry.product.toString()] = normalizedPrice;
+    }
+    return priceMap;
+  }, {});
+};
+
+const getTargetShopkeeperForPricing = async (req, requestedShopkeeperId) => {
+  if (req.user.role === 'shopkeeper') {
+    const shopkeeper = await User.findById(req.user._id).select('_id role');
+    if (!shopkeeper || shopkeeper.role !== 'shopkeeper') {
+      return { error: 'Shopkeeper not found', status: 404 };
+    }
+    return { shopkeeper };
+  }
+
+  if (!requestedShopkeeperId) {
+    return { error: 'shopkeeperId is required', status: 400 };
+  }
+
+  const shopkeeper = await User.findById(requestedShopkeeperId).select('_id role');
+  if (!shopkeeper) {
+    return { error: 'Shopkeeper not found', status: 404 };
+  }
+
+  if (shopkeeper.role !== 'shopkeeper') {
+    return { error: 'Invalid shopkeeper ID', status: 400 };
+  }
+
+  if (req.user.role === 'salesman') {
+    const assignment = await ShopSalesmanAssignment.findOne({
+      salesmanId: req.user._id,
+      shopkeeperId: requestedShopkeeperId,
+      isActive: true
+    }).select('_id');
+
+    if (!assignment) {
+      return { error: 'You can only access pricing for your assigned shopkeepers', status: 403 };
+    }
+  }
+
+  return { shopkeeper };
+};
+
 // @route   POST /api/shopkeeper-orders
 // @desc    Place an order (Shopkeeper or Salesman on behalf of shopkeeper)
 // @access  Private (Shopkeeper, Salesman, Admin, SuperAdmin)
@@ -134,10 +203,15 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
 
     let totalAmount = 0;
     const orderItems = [];
+    const productIds = [...new Set(items.map(item => item.productId).filter(Boolean))];
+    const products = await Product.find({ _id: { $in: productIds } });
+    const productMap = new Map(products.map(product => [product._id.toString(), product]));
+    const savedPriceMap = await getSavedPriceMap(shopkeeper._id, productIds);
+    const persistedPriceUpdates = new Map();
 
     // Validate and calculate prices for each item
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = productMap.get(String(item.productId));
       if (!product) {
         return res.status(404).json({ error: `Product ${item.productId} not found` });
       }
@@ -150,11 +224,16 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
       const hasCustomPriceValue = item.customPrice !== undefined && item.customPrice !== null && item.customPrice !== '';
       const requestedCustomPrice = Number(item.customPrice);
       const hasCustomPrice = hasCustomPriceValue && Number.isFinite(requestedCustomPrice) && requestedCustomPrice >= 0;
-      const unitPrice = hasCustomPrice ? requestedCustomPrice : product.price;
+      const savedDefaultPrice = normalizePrice(savedPriceMap[String(product._id)]);
+      const unitPrice = normalizePrice(
+        hasCustomPrice
+          ? requestedCustomPrice
+          : (savedDefaultPrice !== null ? savedDefaultPrice : product.price)
+      );
       const requestedOriginalPrice = Number(item.originalPrice);
       const originalUnitPrice = Number.isFinite(requestedOriginalPrice) && requestedOriginalPrice > 0
-        ? requestedOriginalPrice
-        : product.price;
+        ? normalizePrice(requestedOriginalPrice)
+        : normalizePrice(product.price);
       const discountPerUnit = Math.max(0, originalUnitPrice - unitPrice);
       const discountTotal = discountPerUnit * item.quantity;
       const discountPercentage = originalUnitPrice > 0
@@ -172,6 +251,12 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
         discountPerUnit,
         discountTotal,
         discountPercentage
+      });
+
+      persistedPriceUpdates.set(String(product._id), {
+        productId: product._id,
+        unitPrice,
+        basePrice: normalizePrice(product.price)
       });
     }
 
@@ -213,6 +298,39 @@ router.post('/', authenticateToken, requireOrderPlacer, async (req, res) => {
     });
 
     await order.save();
+
+    const priceUpdates = Array.from(persistedPriceUpdates.values());
+    const productsToReset = priceUpdates
+      .filter(entry => pricesMatch(entry.unitPrice, entry.basePrice))
+      .map(entry => entry.productId);
+    const productsToOverride = priceUpdates
+      .filter(entry => !pricesMatch(entry.unitPrice, entry.basePrice))
+      .map(entry => ({
+        updateOne: {
+          filter: {
+            shopkeeper: shopkeeper._id,
+            product: entry.productId
+          },
+          update: {
+            $set: {
+              price: entry.unitPrice,
+              updatedBy: req.user._id
+            }
+          },
+          upsert: true
+        }
+      }));
+
+    if (productsToReset.length > 0) {
+      await ShopkeeperProductPrice.deleteMany({
+        shopkeeper: shopkeeper._id,
+        product: { $in: productsToReset }
+      });
+    }
+
+    if (productsToOverride.length > 0) {
+      await ShopkeeperProductPrice.bulkWrite(productsToOverride, { ordered: false });
+    }
 
     // Update shopkeeper's total pending after applying any excess payment.
     await User.findByIdAndUpdate(shopkeeper._id, {
@@ -333,6 +451,30 @@ router.get('/shopkeepers', authenticateToken, async (req, res) => {
     const shopkeepers = await User.find(query).select('name email phone address');
 
     res.json({ shopkeepers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// @route   GET /api/shopkeeper-orders/default-prices
+// @desc    Get saved default selling prices for a shopkeeper
+// @access  Private (Shopkeeper, Salesman, Admin, SuperAdmin)
+router.get('/default-prices', authenticateToken, requireOrderPlacer, async (req, res) => {
+  try {
+    const { shopkeeperId } = req.query;
+    const { shopkeeper, error, status } = await getTargetShopkeeperForPricing(req, shopkeeperId);
+
+    if (error) {
+      return res.status(status).json({ error });
+    }
+
+    const priceMap = await getSavedPriceMap(shopkeeper._id);
+
+    res.json({
+      success: true,
+      shopkeeperId: shopkeeper._id,
+      priceMap
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

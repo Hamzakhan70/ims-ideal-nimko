@@ -6,6 +6,7 @@ import { AUTH_TOKEN_STORAGE_KEY } from '../config/appConfig';
 export default function ShopkeeperOrderPage() {
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
+    const [defaultPriceMap, setDefaultPriceMap] = useState({});
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -18,8 +19,28 @@ export default function ShopkeeperOrderPage() {
 
     const fetchProducts = async () => {
         try {
-            const response = await axios.get(api.products.getAll());
-            setProducts(response.data.products || response.data);
+            const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+            const [productsResult, pricingResult] = await Promise.allSettled([
+                axios.get(api.products.getAll()),
+                axios.get(api.shopkeeperOrders.getDefaultPrices(), {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
+            ]);
+
+            if (productsResult.status === 'fulfilled') {
+                setProducts(productsResult.value.data.products || productsResult.value.data || []);
+            } else {
+                console.error('Error fetching products:', productsResult.reason);
+            }
+
+            if (pricingResult.status === 'fulfilled') {
+                setDefaultPriceMap(pricingResult.value.data?.priceMap || {});
+            } else {
+                console.error('Error fetching saved shopkeeper prices:', pricingResult.reason);
+                setDefaultPriceMap({});
+            }
         } catch (error) {
             console.error('Error fetching products:', error);
         } finally {
@@ -27,8 +48,19 @@ export default function ShopkeeperOrderPage() {
         }
     };
 
+    const getResolvedPrice = (productId, fallbackPrice) => {
+        const savedPrice = Number(defaultPriceMap?.[productId]);
+        if (Number.isFinite(savedPrice) && savedPrice >= 0) {
+            return Number(savedPrice.toFixed(2));
+        }
+
+        const basePrice = Number(fallbackPrice);
+        return Number.isFinite(basePrice) && basePrice >= 0 ? Number(basePrice.toFixed(2)) : 0;
+    };
+
     const addToCart = (product) => {
         const existingItem = cart.find(item => item.productId === product._id);
+        const resolvedPrice = getResolvedPrice(product._id, product.price);
         if (existingItem) {
             setCart(cart.map(item => item.productId === product._id ? {
                 ...item,
@@ -39,7 +71,8 @@ export default function ShopkeeperOrderPage() {
                 ...cart, {
                     productId: product._id,
                     name: product.name,
-                    price: product.price,
+                    originalPrice: product.price,
+                    price: resolvedPrice,
                     quantity: 1,
                     imageURL: product.imageURL,
                     packets: product.packets || null
@@ -81,7 +114,12 @@ export default function ShopkeeperOrderPage() {
         setSubmitting(true);
         try {
             const orderData = {
-                items: cart.map(item => ({productId: item.productId, quantity: item.quantity})),
+                items: cart.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    originalPrice: item.originalPrice,
+                    customPrice: item.price
+                })),
                 deliveryAddress: orderForm.deliveryAddress,
                 notes: orderForm.notes,
                 paymentMethod: orderForm.paymentMethod
@@ -167,6 +205,8 @@ export default function ShopkeeperOrderPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {
                             filteredProducts.map((product) => {
+                                const displayPrice = getResolvedPrice(product._id, product.price);
+                                const hasSavedShopkeeperPrice = displayPrice !== product.price;
                                 const isLowStock = product.stock < 5;
                                 const isOutOfStock = product.stock <= 0;
 
@@ -224,10 +264,26 @@ export default function ShopkeeperOrderPage() {
                                                 product.description
                                             }</p>
                                             <div className="flex justify-between items-center mb-3">
-                                                <span className="text-xl font-bold text-yellow-600">PKR {
-                                                    product.price
-                                                }</span>
+                                                <div>
+                                                    <span className="text-xl font-bold text-yellow-600">PKR {
+                                                        displayPrice
+                                                    }</span>
+                                                    {
+                                                    hasSavedShopkeeperPrice && (
+                                                        <div className="text-xs text-green-600">
+                                                            Base: PKR {product.price}
+                                                        </div>
+                                                    )
+                                                }
+                                                </div>
                                                 <div className="text-right text-sm text-gray-500">
+                                                    {
+                                                    hasSavedShopkeeperPrice && (
+                                                        <div className="text-xs font-medium text-green-600">
+                                                            Saved price
+                                                        </div>
+                                                    )
+                                                }
                                                     <div className={
                                                         `${
                                                             isOutOfStock ? 'text-red-600' : isLowStock ? 'text-red-500' : 'text-gray-500'

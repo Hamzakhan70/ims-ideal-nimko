@@ -38,6 +38,7 @@ export const api = {
     getAll: () => withApi('/shopkeeper-orders'),
     getById: (id) => withApi(`/shopkeeper-orders/${id}`),
     create: () => withApi('/shopkeeper-orders'),
+    getDefaultPrices: () => withApi('/shopkeeper-orders/default-prices'),
     updateStatus: (id) => withApi(`/shopkeeper-orders/${id}/status`),
     updatePayment: (id) => withApi(`/shopkeeper-orders/${id}/payment`),
     stats: () => withApi('/shopkeeper-orders/stats/dashboard')

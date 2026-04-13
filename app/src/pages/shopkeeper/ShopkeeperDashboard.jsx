@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { api } from '../../utils/api';
+import { AUTH_TOKEN_STORAGE_KEY } from '../../config/appConfig';
 
 export default function ShopkeeperDashboard() {
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
+  const [defaultPriceMap, setDefaultPriceMap] = useState({});
   const [orders, setOrders] = useState([]);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [orderForm, setOrderForm] = useState({
@@ -22,8 +24,28 @@ export default function ShopkeeperDashboard() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get(api.products.getAll());
-      setProducts(response.data.products || response.data);
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+      const [productsResult, pricingResult] = await Promise.allSettled([
+        axios.get(api.products.getAll()),
+        axios.get(api.shopkeeperOrders.getDefaultPrices(), {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+      ]);
+
+      if (productsResult.status === 'fulfilled') {
+        setProducts(productsResult.value.data.products || productsResult.value.data || []);
+      } else {
+        console.error('Error fetching products:', productsResult.reason);
+      }
+
+      if (pricingResult.status === 'fulfilled') {
+        setDefaultPriceMap(pricingResult.value.data?.priceMap || {});
+      } else {
+        console.error('Error fetching saved shopkeeper prices:', pricingResult.reason);
+        setDefaultPriceMap({});
+      }
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -44,7 +66,18 @@ export default function ShopkeeperDashboard() {
     }
   };
 
+  const getResolvedPrice = (productId, fallbackPrice) => {
+    const savedPrice = Number(defaultPriceMap?.[productId]);
+    if (Number.isFinite(savedPrice) && savedPrice >= 0) {
+      return Number(savedPrice.toFixed(2));
+    }
+
+    const basePrice = Number(fallbackPrice);
+    return Number.isFinite(basePrice) && basePrice >= 0 ? Number(basePrice.toFixed(2)) : 0;
+  };
+
   const addToCart = (product) => {
+    const resolvedPrice = getResolvedPrice(product._id, product.price);
     const existingItem = cart.find(item => item.product._id === product._id);
     if (existingItem) {
       setCart(cart.map(item =>
@@ -53,7 +86,7 @@ export default function ShopkeeperDashboard() {
           : item
       ));
     } else {
-      setCart([...cart, { product, quantity: 1 }]);
+      setCart([...cart, { product, price: resolvedPrice, quantity: 1 }]);
     }
   };
 
@@ -74,7 +107,7 @@ export default function ShopkeeperDashboard() {
   };
 
   const getTotalAmount = () => {
-    return cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
   const getTotalItems = (items = cart) => {
@@ -84,13 +117,13 @@ export default function ShopkeeperDashboard() {
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     try {
-      const orderItems = cart.map(item => ({
-        product: item.product._id,
-        quantity: item.quantity
-      }));
-
       await axios.post(api.shopkeeperOrders.create(), {
-        orderItems,
+        items: cart.map(item => ({
+          productId: item.product._id,
+          quantity: item.quantity,
+          originalPrice: item.product.price,
+          customPrice: item.price
+        })),
         ...orderForm
       }, {
         headers: {
@@ -160,6 +193,8 @@ export default function ShopkeeperDashboard() {
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Available Products</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {products.map((product) => {
+            const displayPrice = getResolvedPrice(product._id, product.price);
+            const hasSavedShopkeeperPrice = displayPrice !== product.price;
             const isLowStock = product.stock < 5;
             const isOutOfStock = product.stock <= 0;
             
@@ -202,19 +237,29 @@ export default function ShopkeeperDashboard() {
                   </div>
                   <p className="text-gray-600 text-sm mb-2 line-clamp-2">{product.description}</p>
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-xl font-bold text-yellow-600">PKR {product.price}</span>
-                    <span className={`text-sm font-medium ${
+                    <div>
+                      <span className="text-xl font-bold text-yellow-600">PKR {displayPrice}</span>
+                      {hasSavedShopkeeperPrice && (
+                        <div className="text-xs text-green-600">Base: PKR {product.price}</div>
+                      )}
+                    </div>
+                    <div className={`text-sm font-medium ${
                       isOutOfStock 
                         ? 'text-red-600' 
                         : isLowStock 
                           ? 'text-red-500' 
                           : 'text-gray-500'
                     }`}>
-                      Stock: {product.stock}
-                      {isLowStock && !isOutOfStock && (
-                        <span className="ml-1 text-red-600">⚠️</span>
+                      {hasSavedShopkeeperPrice && (
+                        <div className="text-xs text-green-600">Saved price</div>
                       )}
-                    </span>
+                      <div>
+                        Stock: {product.stock}
+                        {isLowStock && !isOutOfStock && (
+                          <span className="ml-1 text-red-600">⚠️</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <button
                     onClick={() => addToCart(product)}
@@ -268,7 +313,7 @@ export default function ShopkeeperDashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      PKR {item.product.price}
+                      PKR {item.price}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -288,7 +333,7 @@ export default function ShopkeeperDashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      PKR {item.product.price * item.quantity}
+                      PKR {item.price * item.quantity}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
@@ -417,7 +462,7 @@ export default function ShopkeeperDashboard() {
                     {cart.map((item) => (
                       <div key={item.product._id} className="flex justify-between text-sm">
                         <span>{item.product.name} x {item.quantity}</span>
-                        <span>PKR {item.product.price * item.quantity}</span>
+                        <span>PKR {item.price * item.quantity}</span>
                       </div>
                     ))}
                     <div className="flex justify-between text-sm text-gray-600 pt-2">
