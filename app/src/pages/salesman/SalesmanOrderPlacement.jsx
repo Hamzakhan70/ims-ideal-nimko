@@ -439,7 +439,9 @@ export default function SalesmanOrderPlacement() {
 
     const receiptStyles = `
       .receipt-compact {
-        width: 100%;
+        width: 320px;
+        max-width: 100%;
+        margin: 0 auto;
         color: #000000;
         font-family: Arial, sans-serif;
         font-size: 10px;
@@ -595,6 +597,9 @@ export default function SalesmanOrderPlacement() {
           font-family: Arial, sans-serif;
         }
         .receipt-compact {
+          width: 72mm;
+          max-width: 72mm;
+          margin: 0;
           font-size: 9px;
         }
         .receipt-badge {
@@ -989,7 +994,7 @@ export default function SalesmanOrderPlacement() {
                 {
                 showReceipt && lastOrder && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                        <div className="bg-white rounded-lg p-3 sm:p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+                        <div className="bg-white rounded-lg p-3 sm:p-6 max-w-sm w-full max-h-[95vh] overflow-y-auto">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-lg sm:text-2xl font-bold text-gray-900">📄 Order Receipt</h2>
                                 <button onClick={
