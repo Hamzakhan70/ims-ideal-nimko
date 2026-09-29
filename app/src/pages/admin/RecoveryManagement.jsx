@@ -4,11 +4,15 @@ import { api } from '../../utils/api';
 import DataTable from '../../components/common/DataTable';
 import Pagination from '../../components/common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
+import { useAdmin } from '../../context/AdminContext';
 
 const RecoveryManagement = () => {
+  const { admin } = useAdmin();
   const [stats, setStats] = useState(null);
   const [shopkeepers, setShopkeepers] = useState([]);
   const [salesmen, setSalesmen] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [cityFilter, setCityFilter] = useState('');
   const [shopkeeperFilter, setShopkeeperFilter] = useState('');
   const [salesmanFilter, setSalesmanFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -24,6 +28,7 @@ const RecoveryManagement = () => {
       limit: params.limit,
       ...(params.shopkeeperId && { shopkeeperId: params.shopkeeperId }),
       ...(params.salesmanId && { salesmanId: params.salesmanId }),
+      ...(params.cityId && { cityId: params.cityId }),
       ...(params.status && { status: params.status }),
       ...(params.recoveryType && { recoveryType: params.recoveryType }),
       ...(params.startDate && { startDate: params.startDate }),
@@ -48,6 +53,7 @@ const RecoveryManagement = () => {
   } = usePagination(fetchRecoveries, {
     shopkeeperId: '',
     salesmanId: '',
+    cityId: '',
     status: '',
     recoveryType: '',
     startDate: '',
@@ -57,8 +63,13 @@ const RecoveryManagement = () => {
   useEffect(() => {
     fetchShopkeepers();
     fetchSalesmen();
+    fetchCities();
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    handleFilterChange('cityId', cityFilter);
+  }, [cityFilter, handleFilterChange]);
 
   // Update filters when they change
   useEffect(() => {
@@ -100,13 +111,45 @@ const RecoveryManagement = () => {
   const fetchSalesmen = async () => {
     try {
       const token = localStorage.getItem('adminToken');
-      const response = await axios.get(api.users.getAll(), {
+      const response = await axios.get(`${api.users.getAll()}?role=salesman&limit=1000`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const salesmenData = response.data.users?.filter(user => user.role === 'salesman') || [];
+      // An admin only sees their own salesmen's recoveries, so only list those
+      const salesmenData = response.data.users?.filter(user =>
+        user.role === 'salesman' &&
+        (admin?.role !== 'admin' || (user.assignedBy?._id || user.assignedBy) === admin._id)
+      ) || [];
       setSalesmen(salesmenData);
     } catch (error) {
       console.error('Error fetching salesmen:', error);
+    }
+  };
+
+  const fetchCities = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await axios.get(api.cities.getAll(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setCities(response.data.cities || []);
+    } catch (error) {
+      console.error('Error fetching cities:', error);
+    }
+  };
+
+  // Shopkeepers shown in the dropdown, narrowed to the selected city
+  const visibleShopkeepers = cityFilter
+    ? shopkeepers.filter(shopkeeper => (shopkeeper.city?._id || shopkeeper.city) === cityFilter)
+    : shopkeepers;
+
+  const handleCityChange = (cityId) => {
+    setCityFilter(cityId);
+    // Drop a selected shopkeeper that isn't in the new city
+    if (cityId && shopkeeperFilter) {
+      const selected = shopkeepers.find(s => s._id === shopkeeperFilter);
+      if ((selected?.city?._id || selected?.city) !== cityId) {
+        setShopkeeperFilter('');
+      }
     }
   };
 
@@ -123,12 +166,14 @@ const RecoveryManagement = () => {
   };
 
   const clearFilters = () => {
+    setCityFilter('');
     setShopkeeperFilter('');
     setSalesmanFilter('');
     setStatusFilter('');
     setRecoveryTypeFilter('');
     setStartDateFilter('');
     setEndDateFilter('');
+    handleFilterChange('cityId', '');
     handleFilterChange('shopkeeperId', '');
     handleFilterChange('salesmanId', '');
     handleFilterChange('status', '');
@@ -289,6 +334,22 @@ const RecoveryManagement = () => {
             </div>
           )}
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+            <select
+              value={cityFilter}
+              onChange={(e) => handleCityChange(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Cities</option>
+              {cities.map(city => (
+                <option key={city._id} value={city._id}>
+                  {city.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Shopkeeper</label>
             <select
               value={shopkeeperFilter}
@@ -296,7 +357,7 @@ const RecoveryManagement = () => {
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Shopkeepers</option>
-              {shopkeepers.map(shopkeeper => (
+              {visibleShopkeepers.map(shopkeeper => (
                 <option key={shopkeeper._id} value={shopkeeper._id}>
                   {shopkeeper.name}
                 </option>

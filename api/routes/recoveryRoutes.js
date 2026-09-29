@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Recovery from '../models/Recovery.js';
 import User from '../models/User.js';
 import Product from '../models/project.js';
@@ -145,39 +146,65 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const { 
       shopkeeperId, 
-      salesmanId, 
-      status, 
-      recoveryType, 
-      startDate, 
+      salesmanId,
+      cityId,
+      status,
+      recoveryType,
+      startDate,
       endDate,
-      page = 1, 
+      page = 1,
       limit = 10 
     } = req.query;
 
     let query = {};
 
-    // Filter based on user role
+    // Filter based on user role. The salesmanId filter may only narrow this scope, never widen it.
     if (req.user.role === 'salesman') {
       query.salesman = req.user._id;
     } else if (req.user.role === 'admin') {
       // Admin can see recoveries from their assigned salesmen
       const salesmen = await User.find({ assignedBy: req.user._id, role: 'salesman' }).select('_id');
-      query.salesman = { $in: salesmen.map(s => s._id) };
+      const salesmanIds = salesmen.map(s => String(s._id));
+      if (salesmanId) {
+        query.salesman = salesmanIds.includes(String(salesmanId)) ? salesmanId : { $in: [] };
+      } else {
+        query.salesman = { $in: salesmanIds };
+      }
     } else if (req.user.role === 'superadmin') {
-      // Super admin can see all recoveries - no additional filtering needed
+      // Super admin can see all recoveries
+      if (salesmanId) query.salesman = salesmanId;
+    } else {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Additional filters
     if (shopkeeperId) query.shopkeeper = shopkeeperId;
-    if (salesmanId) query.salesman = salesmanId;
     if (status) query.status = status;
     if (recoveryType) query.recoveryType = recoveryType;
 
-    // Date range filter
+    // City filter: recoveries don't store a city, so match shopkeepers in that city
+    if (cityId) {
+      if (!mongoose.Types.ObjectId.isValid(cityId)) {
+        return res.status(400).json({ error: 'Invalid city' });
+      }
+      const cityShopkeepers = await User.find({ role: 'shopkeeper', city: cityId }).select('_id');
+      const cityShopkeeperIds = cityShopkeepers.map(s => String(s._id));
+      query.shopkeeper = shopkeeperId
+        ? (cityShopkeeperIds.includes(String(shopkeeperId)) ? shopkeeperId : { $in: [] })
+        : { $in: cityShopkeeperIds };
+    }
+
+    // Date range filter. Plain dates (YYYY-MM-DD) are whole days in Pakistan time,
+    // so the end date includes everything up to 23:59 that day.
+    const isPlainDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
     if (startDate || endDate) {
       query.recoveryDate = {};
-      if (startDate) query.recoveryDate.$gte = new Date(startDate);
-      if (endDate) query.recoveryDate.$lte = new Date(endDate);
+      if (startDate) {
+        query.recoveryDate.$gte = new Date(isPlainDate(startDate) ? `${startDate}T00:00:00+05:00` : startDate);
+      }
+      if (endDate) {
+        query.recoveryDate.$lte = new Date(isPlainDate(endDate) ? `${endDate}T23:59:59.999+05:00` : endDate);
+      }
     }
 
     const skip = (page - 1) * limit;

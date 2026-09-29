@@ -26,6 +26,7 @@ export default function AdminLayout({ children }) {
         { name: 'Products', href: '/admin/products', icon: 'products' },
         { name: 'Website Orders', href: '/admin/website-orders', icon: 'orders' },
         { name: 'Shopkeeper Orders', href: '/admin/shopkeeper-orders', icon: 'orders' },
+        { name: 'Recoveries', href: '/admin/recoveries', icon: 'recoveries' },
         { name: 'Analytics', href: '/admin/analytics', icon: 'analytics' },
       ];
     } else if (role === 'superadmin') {

@@ -18,6 +18,18 @@ export default function RecoveryManagement() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [totalRecoveries, setTotalRecoveries] = useState(0);
+  const [listLoading, setListLoading] = useState(false);
+  const [cities, setCities] = useState([]);
+  const emptyFilters = {
+    cityId: '',
+    shopkeeperId: '',
+    recoveryType: '',
+    status: '',
+    startDate: '',
+    endDate: ''
+  };
+  const [filters, setFilters] = useState(emptyFilters);
   const [formData, setFormData] = useState({
     shopkeeperId: '',
     recoveryType: 'payment_only',
@@ -43,26 +55,77 @@ export default function RecoveryManagement() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    fetchRecoveries();
+  }, [currentPage, pageSize, filters]);
+
+  const fetchRecoveries = async () => {
+    setListLoading(true);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const params = new URLSearchParams({ page: currentPage, limit: pageSize });
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+      const response = await axios.get(`${api.recoveries.getAll()}?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setRecoveries(response.data.recoveries || []);
+      setTotalRecoveries(response.data.pagination?.total || 0);
+    } catch (error) {
+      console.error('Error fetching recoveries:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to load recoveries';
+      showError(`Error loading recoveries: ${errorMessage}`);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  const updateFilter = (key, value) => {
+    setFilters(prev => {
+      const next = { ...prev, [key]: value };
+      // Drop a selected shopkeeper that isn't in the newly chosen city
+      if (key === 'cityId' && value && prev.shopkeeperId) {
+        const selected = shopkeepers.find(s => s._id === prev.shopkeeperId);
+        if ((selected?.city?._id || selected?.city) !== value) next.shopkeeperId = '';
+      }
+      return next;
+    });
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilters(emptyFilters);
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = Object.values(filters).some(Boolean);
+
+  // Shopkeepers shown in the filter dropdown, narrowed to the selected city
+  const filterShopkeepers = filters.cityId
+    ? shopkeepers.filter(s => (s.city?._id || s.city) === filters.cityId)
+    : shopkeepers;
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('adminToken');
       const userId = localStorage.getItem('userId');
 
-      const [recoveriesResponse, shopkeepersResponse, productsResponse] = await Promise.all([
-        axios.get(api.recoveries.getAll(), {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
+      const [shopkeepersResponse, productsResponse, citiesResponse] = await Promise.all([
         axios.get(api.assignments.getShopkeepersBySalesman(userId), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         }),
-        axios.get(api.products.getAll())
+        axios.get(api.products.getAll()),
+        axios.get(api.cities.getAll(), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => ({ data: { cities: [] } }))
       ]);
-      setRecoveries(recoveriesResponse.data.recoveries || []);
       setShopkeepers(shopkeepersResponse.data.shopkeepers || []);
       setProducts(productsResponse.data.products || productsResponse.data || []);
+      setCities(citiesResponse.data.cities || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Failed to load data';
@@ -116,6 +179,7 @@ export default function RecoveryManagement() {
         }
       });
       fetchData();
+      fetchRecoveries();
     } catch (error) {
       console.error('Error creating recovery:', error);
       const errorMessage = error.response?.data?.error || error.message || 'Failed to create recovery';
@@ -240,11 +304,9 @@ export default function RecoveryManagement() {
     return shopkeepers.find(s => s._id === formData.shopkeeperId);
   };
 
-  // Pagination for recoveries
-  const totalPages = Math.ceil(recoveries.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedRecoveries = recoveries.slice(startIndex, endIndex);
+  // Pagination for recoveries (the server returns one page at a time)
+  const totalPages = Math.ceil(totalRecoveries / pageSize);
+  const paginatedRecoveries = recoveries;
 
   if (loading) {
     return (
@@ -579,15 +641,108 @@ export default function RecoveryManagement() {
         </div>
       )}
 
+      {/* Filters */}
+      <div className="bg-white p-3 sm:p-4 rounded-lg shadow mb-4 sm:mb-6">
+        <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">🔍 Filters</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+            <select
+              value={filters.cityId}
+              onChange={(e) => updateFilter('cityId', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Cities</option>
+              {cities.map(city => (
+                <option key={city._id} value={city._id}>{city.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Shopkeeper</label>
+            <select
+              value={filters.shopkeeperId}
+              onChange={(e) => updateFilter('shopkeeperId', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Shopkeepers</option>
+              {filterShopkeepers.map(shopkeeper => (
+                <option key={shopkeeper._id} value={shopkeeper._id}>{shopkeeper.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Recovery Type</label>
+            <select
+              value={filters.recoveryType}
+              onChange={(e) => updateFilter('recoveryType', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Types</option>
+              <option value="payment_only">Payment Only</option>
+              <option value="payment_with_items">Payment with Items</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={filters.status}
+              onChange={(e) => updateFilter('status', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={(e) => updateFilter('startDate', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={(e) => updateFilter('endDate', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={clearFilters}
+              className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              🗑️ Clear Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Recoveries List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-          <h3 className="text-base sm:text-lg font-medium">📋 Recent Recoveries</h3>
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-base sm:text-lg font-medium">📋 Recoveries ({totalRecoveries})</h3>
+          {listLoading && <span className="text-sm text-gray-500">Loading...</span>}
         </div>
-        
+
         {recoveries.length === 0 ? (
           <div className="text-center py-6 sm:py-8 text-gray-500 text-sm sm:text-base">
-            No recoveries found. Record your first recovery above.
+            {hasActiveFilters
+              ? 'No recoveries match your filters.'
+              : 'No recoveries found. Record your first recovery above.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -709,7 +864,7 @@ export default function RecoveryManagement() {
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
-              totalItems={recoveries.length}
+              totalItems={totalRecoveries}
               pageSize={pageSize}
               pageSizeOptions={[10, 20, 50, 100]}
               onPageChange={setCurrentPage}
