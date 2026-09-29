@@ -30,6 +30,9 @@ export default function RecoveryManagement() {
     endDate: ''
   };
   const [filters, setFilters] = useState(emptyFilters);
+  // City + name search used only to narrow the shopkeeper list in the Record Recovery form
+  const [formCityId, setFormCityId] = useState('');
+  const [formShopSearch, setFormShopSearch] = useState('');
   const [formData, setFormData] = useState({
     shopkeeperId: '',
     recoveryType: 'payment_only',
@@ -105,6 +108,16 @@ export default function RecoveryManagement() {
   const filterShopkeepers = filters.cityId
     ? shopkeepers.filter(s => (s.city?._id || s.city) === filters.cityId)
     : shopkeepers;
+
+  // Shopkeepers shown in the Record Recovery form, narrowed by city and name search.
+  // The currently selected shopkeeper always stays in the list so the selection isn't lost.
+  const searchText = formShopSearch.trim().toLowerCase();
+  const formShopkeepers = shopkeepers.filter(s => {
+    if (s._id === formData.shopkeeperId) return true;
+    if (formCityId && (s.city?._id || s.city) !== formCityId) return false;
+    if (searchText && !(s.name || '').toLowerCase().includes(searchText)) return false;
+    return true;
+  });
 
   const fetchData = async () => {
     setLoading(true);
@@ -359,7 +372,36 @@ export default function RecoveryManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Shopkeeper *
+                    City
+                  </label>
+                  <select
+                    value={formCityId}
+                    onChange={(e) => setFormCityId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Cities</option>
+                    {cities.map(city => (
+                      <option key={city._id} value={city._id}>{city.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Search Shopkeeper
+                  </label>
+                  <input
+                    type="text"
+                    value={formShopSearch}
+                    onChange={(e) => setFormShopSearch(e.target.value)}
+                    placeholder="Type shop name..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Shopkeeper * <span className="text-xs font-normal text-gray-500">({formShopkeepers.length} found)</span>
                   </label>
                   <select
                     value={formData.shopkeeperId}
@@ -375,8 +417,10 @@ export default function RecoveryManagement() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
-                    <option value="">Select Shopkeeper</option>
-                    {shopkeepers.map(shopkeeper => (
+                    <option value="">
+                      {formShopkeepers.length === 0 ? 'No shopkeeper matches' : 'Select Shopkeeper'}
+                    </option>
+                    {formShopkeepers.map(shopkeeper => (
                       <option key={shopkeeper._id} value={shopkeeper._id}>
                         {shopkeeper.name} - Pending: PKR {shopkeeper.pendingAmount?.toFixed(2) || '0.00'}
                       </option>
