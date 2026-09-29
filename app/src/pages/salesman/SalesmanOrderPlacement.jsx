@@ -444,7 +444,7 @@ export default function SalesmanOrderPlacement() {
         margin: 0 auto;
         color: #000000;
         font-family: Arial, sans-serif;
-        font-size: 10px;
+        font-size: 9px;
         line-height: 1.2;
       }
       .receipt-compact * {
@@ -452,29 +452,29 @@ export default function SalesmanOrderPlacement() {
       }
       .receipt-compact-header {
         text-align: center;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
       }
       .receipt-compact-header h3 {
         margin: 0;
-        font-size: 15px;
+        font-size: 13px;
         font-weight: 700;
       }
       .receipt-compact-header p {
         margin: 2px 0 0;
-        font-size: 11px;
+        font-size: 9px;
       }
       .receipt-compact-shop {
-        margin-top: 4px !important;
-        font-size: 13px !important;
+        margin-top: 3px !important;
+        font-size: 11px !important;
         font-weight: 700;
       }
       .receipt-compact-info {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
       }
       .receipt-compact-info td {
-        padding: 2px 0;
+        padding: 1px 0;
         vertical-align: top;
       }
       .receipt-compact-info td:first-child {
@@ -488,9 +488,9 @@ export default function SalesmanOrderPlacement() {
       }
       .receipt-badge {
         display: inline-block;
-        padding: 2px 6px;
+        padding: 1px 5px;
         border-radius: 4px;
-        font-size: 10px;
+        font-size: 8px;
         font-weight: 700;
         line-height: 1.2;
       }
@@ -507,7 +507,7 @@ export default function SalesmanOrderPlacement() {
         color: #92400e;
       }
       .receipt-compact-note {
-        margin-bottom: 8px;
+        margin-bottom: 6px;
       }
       .receipt-compact-note strong {
         display: inline-block;
@@ -522,7 +522,7 @@ export default function SalesmanOrderPlacement() {
       }
       .receipt-compact-items th,
       .receipt-compact-items td {
-        padding: 2px 3px;
+        padding: 2px 2px;
         vertical-align: top;
       }
       .receipt-compact-items thead th {
@@ -583,12 +583,12 @@ export default function SalesmanOrderPlacement() {
         color: #b91c1c;
       }
       .receipt-compact-footer {
-        margin-top: 8px;
+        margin-top: 6px;
         text-align: center;
-        font-size: 10px;
+        font-size: 8px;
       }
       .receipt-compact-footer p {
-        margin: 3px 0;
+        margin: 2px 0;
       }
       @media print {
         body {
@@ -600,14 +600,14 @@ export default function SalesmanOrderPlacement() {
           width: 72mm;
           max-width: 72mm;
           margin: 0;
-          font-size: 9px;
+          font-size: 8px;
         }
         .receipt-badge {
           padding: 1px 5px;
-          font-size: 9px;
+          font-size: 8px;
         }
         .receipt-compact-items {
-          font-size: 9px;
+          font-size: 9.5px;
         }
       }
     `;

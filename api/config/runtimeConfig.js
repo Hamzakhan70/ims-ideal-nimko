@@ -1,7 +1,12 @@
 import dotenv from 'dotenv';
+import dns from 'dns';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
+// Local fix: Node on this machine resolves DNS via 127.0.0.1, which fails the
+// MongoDB Atlas SRV lookup (querySrv ECONNREFUSED). Use public DNS instead.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
